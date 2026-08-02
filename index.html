@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Weg auf 85">
+<title>Mein Weg auf 85</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js" integrity="sha384-iU8HYtnGQ8Cy4zl7gbNMOhsDTTKX02BTXptVP/vqAWIaTfM7isw76iyZCsjL2eVi" crossorigin="anonymous"></script>
+<style>
+:root { color-scheme: light;
+  --bg:#f6f7f9; --card:#ffffff; --ink:#1c2230; --muted:#6b7280;
+  --accent:#2563eb; --green:#16a34a; --red:#dc2626; --amber:#d97706;
+  --line:#e5e7eb; --radius:14px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);
+  padding-bottom:calc(70px + env(safe-area-inset-bottom));}
+.wrap{max-width:560px;margin:0 auto;padding:14px 14px 0}
+h1{font-size:1.15rem;font-weight:700;padding:4px 2px 10px}
+h2{font-size:.95rem;font-weight:700;margin-bottom:8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+.muted{color:var(--muted);font-size:.82rem}
+.big{font-size:2.2rem;font-weight:800;line-height:1.1}
+.row{display:flex;gap:8px;align-items:center}
+.grow{flex:1}
+input[type=number],input[type=date],textarea{width:100%;font-size:1rem;padding:12px;border:1px solid var(--line);border-radius:10px;background:#fbfbfc;color:var(--ink)}
+textarea{min-height:90px;resize:vertical;font-family:inherit}
+button.primary{background:var(--accent);color:#fff;border:0;border-radius:10px;padding:12px 18px;font-size:1rem;font-weight:600;cursor:pointer}
+button.ghost{background:transparent;border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:.85rem;color:var(--muted);cursor:pointer}
+.progressOuter{background:#eceef2;border-radius:99px;height:14px;overflow:hidden;margin:10px 0 6px}
+.progressInner{background:linear-gradient(90deg,#2563eb,#16a34a);height:100%;border-radius:99px;transition:width .4s}
+.milestones{display:flex;justify-content:space-between;font-size:.75rem;color:var(--muted)}
+.badge{display:inline-block;padding:3px 10px;border-radius:99px;font-size:.75rem;font-weight:600;margin:2px 4px 2px 0}
+.badge.done{background:#dcfce7;color:#166534}
+.badge.open{background:#f1f5f9;color:#64748b}
+.chartBox{position:relative;height:230px}
+.tabbar{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--line);
+  display:flex;justify-content:space-around;padding:6px 0 calc(6px + env(safe-area-inset-bottom));z-index:10}
+.tabbar button{background:none;border:0;font-size:.68rem;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;padding:4px 10px;font-weight:600}
+.tabbar button .ico{font-size:1.3rem;line-height:1}
+.tabbar button.active{color:var(--accent)}
+.tab{display:none}
+.tab.active{display:block}
+.dotRow{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.dot{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:#fff}
+.dot.ok{background:var(--green)}.dot.over{background:var(--red)}.dot.none{background:#d7dbe1;color:#7c8494}
+.list{margin-top:10px}
+.listItem{display:flex;justify-content:space-between;align-items:center;padding:9px 2px;border-bottom:1px solid var(--line);font-size:.9rem}
+.listItem:last-child{border-bottom:0}
+.del{color:var(--red);background:none;border:0;font-size:1rem;cursor:pointer;padding:2px 6px}
+details{border:1px solid var(--line);border-radius:12px;margin-bottom:10px;background:var(--card);overflow:hidden}
+summary{padding:13px 14px;font-weight:700;font-size:.92rem;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center}
+summary::after{content:"▾";color:var(--muted)}
+details[open] summary::after{content:"▴"}
+.dbody{padding:0 14px 14px;font-size:.9rem;line-height:1.55}
+.dbody ul{padding-left:18px;margin:6px 0}
+.dbody li{margin-bottom:4px}
+.dbody h3{font-size:.85rem;margin:10px 0 4px;color:var(--accent)}
+.pill{display:inline-block;background:#eff6ff;color:#1d4ed8;border-radius:99px;padding:2px 9px;font-size:.72rem;font-weight:700;margin-right:4px}
+.counter{display:flex;align-items:center;gap:16px;justify-content:center;margin:8px 0}
+.counter button{width:52px;height:52px;border-radius:50%;border:1px solid var(--line);background:#fbfbfc;font-size:1.5rem;cursor:pointer;color:var(--ink)}
+.counter .num{font-size:2rem;font-weight:800;min-width:44px;text-align:center}
+.statusLine{text-align:center;font-weight:700;font-size:.95rem;margin-top:4px}
+.ok-t{color:var(--green)}.over-t{color:var(--red)}.none-t{color:var(--muted)}
+.trend{font-size:.9rem;font-weight:600}
+.trend.down{color:var(--green)}.trend.up{color:var(--red)}
+#coachTips div{padding:7px 0;border-bottom:1px solid var(--line)}
+#coachTips div:last-child{border-bottom:0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 id="pageTitle">Mein Weg auf 85</h1>
+
+  <!-- GEWICHT -->
+  <div class="tab active" id="tab-gewicht">
+    <div class="card">
+      <div class="muted">Wochendurchschnitt (7 Tage)</div>
+      <div class="row">
+        <div class="big" id="avgNow">–</div>
+        <div class="grow"></div>
+        <div class="trend" id="trendTxt"></div>
+      </div>
+      <div class="progressOuter"><div class="progressInner" id="progBar" style="width:0%"></div></div>
+      <div class="milestones"><span>107</span><span>99</span><span>95</span><span>90</span><span>85</span></div>
+      <div style="margin-top:8px" id="badges"></div>
+    </div>
+
+    <div class="card">
+      <h2>💡 Dein Coach heute</h2>
+      <div id="coachTips" style="font-size:.9rem;line-height:1.55"></div>
+    </div>
+
+    <div class="card">
+      <h2>Heute eintragen</h2>
+      <div class="row" style="margin-bottom:8px">
+        <input type="date" id="wDate">
+        <input type="number" id="wKg" step="0.1" min="60" max="150" placeholder="kg" inputmode="decimal">
+      </div>
+      <button class="primary" style="width:100%" id="wSave">Speichern</button>
+    </div>
+
+    <div class="card">
+      <h2>Verlauf</h2>
+      <div class="chartBox"><canvas id="chart"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>Letzte Einträge</h2>
+      <div class="list" id="wList"></div>
+    </div>
+  </div>
+
+  <!-- BUDGET -->
+  <div class="tab" id="tab-budget">
+    <div class="card">
+      <h2>Süß-Budget heute</h2>
+      <div class="muted">Regel: 1 Süßigkeit pro Tag – du wählst wann (Nussecke zählt).</div>
+      <div class="counter">
+        <button id="minus">−</button>
+        <div class="num" id="sweetNum">0</div>
+        <button id="plus">+</button>
+      </div>
+      <div class="statusLine" id="sweetStatus"></div>
+    </div>
+    <div class="card">
+      <h2>Letzte 14 Tage</h2>
+      <div class="muted">Grün = Budget gehalten (0–1) · Rot = überzogen · Grau = nichts eingetragen</div>
+      <div class="dotRow" id="sweetDots"></div>
+    </div>
+    <div class="card">
+      <h2>Craving-Notfallplan</h2>
+      <div class="muted" style="line-height:1.6">
+        1. 10-Minuten-Timer stellen<br>
+        2. Ortswechsel: raus, Tee holen, Treppe<br>
+        3. Danach frei entscheiden – aus dem Budget, im Sitzen, mit Genuss.<br>
+        Kein Drama. Ziel ist die Pause vor der Entscheidung, nicht null Süßes.
+      </div>
+    </div>
+  </div>
+
+  <!-- NOTIZEN -->
+  <div class="tab" id="tab-notizen">
+    <div class="card">
+      <h2 id="noteWeekTitle">Wochen-Notiz</h2>
+      <div class="muted" style="margin-bottom:8px">Was lief gut? Was war schwer? (Sonntags-Check-in)</div>
+      <textarea id="noteText" placeholder="z.B. Kantine 2× gut gewählt, Freitag Craving verloren…"></textarea>
+      <button class="primary" style="width:100%;margin-top:8px" id="noteSave">Notiz speichern</button>
+    </div>
+    <div class="card">
+      <h2>🤖 Persönliche Analyse von Claude</h2>
+      <div class="muted" style="line-height:1.55">Kopiert deine Daten der letzten 4 Wochen. Füge sie in einen Chat mit Claude ein – du bekommst eine individuelle Auswertung mit neuen Ratschlägen.</div>
+      <button class="primary" style="width:100%;margin-top:10px" id="exportBtn">Daten für Claude kopieren</button>
+      <div class="muted" id="exportDone" style="margin-top:6px;text-align:center"></div>
+    </div>
+
+    <div class="card">
+      <h2>Frühere Wochen</h2>
+      <div class="list" id="noteList"></div>
+    </div>
+
+    <div class="card">
+      <h2>💾 Backup</h2>
+      <div class="muted" style="line-height:1.55">Sichert alle Daten (Gewicht, Budget, Notizen) als Text. Ab und zu kopieren und z.B. in Apple Notizen ablegen – dann kann nie etwas verloren gehen.</div>
+      <button class="primary" style="width:100%;margin-top:10px" id="bkExport">Backup kopieren</button>
+      <textarea id="bkText" placeholder="Zum Wiederherstellen: Backup-Text hier einfügen…" style="margin-top:10px;min-height:60px"></textarea>
+      <button class="ghost" style="width:100%;margin-top:8px" id="bkImport">Backup wiederherstellen</button>
+      <div class="muted" id="bkMsg" style="margin-top:6px;text-align:center"></div>
+    </div>
+  </div>
+
+  <!-- RATGEBER -->
+  <div class="tab" id="tab-ratgeber">
+    <div class="card">
+      <h2>📸 Mahlzeiten-Check per Foto</h2>
+      <div class="muted" style="line-height:1.6">Unsicher, ob eine Mahlzeit passt? Foto machen und in der <b>Claude-App</b> schicken mit:<br>
+      <i>„Analysiere diese Mahlzeit für mein Abnehmziel: genug Protein? Portionsgröße ok? Was würdest du ändern? Meine Regeln: 2 Mahlzeiten am Tag, Protein als Anker, Beilagen halbieren."</i><br>
+      Du bekommst sofort eine Einschätzung und einen Verbesserungsvorschlag.</div>
+    </div>
+    <details open>
+      <summary>Meine 9 Regeln</summary>
+      <div class="dbody"><ul>
+        <li><b>2 Hauptmahlzeiten</b>, Protein satt – besonders mittags (Anti-Craving)</li>
+        <li><b>1 Süßigkeit/Tag</b> aus dem Budget, wann du willst</li>
+        <li>Hartes Craving: <b>10 Min. + Ortswechsel</b>, dann frei entscheiden</li>
+        <li>Heimkommen: <b>Sofort-Puffer</b>, dann 10-Minuten-Gericht</li>
+        <li>Anlässe: <b>Drink-Zahl vorher festlegen</b>, Wasser dazwischen</li>
+        <li>Nachschlag erst nach <b>10 Min. Wartezeit</b></li>
+        <li>Täglich wiegen – <b>nur der Wochendurchschnitt zählt</b></li>
+        <li>1× Sport + <b>15 Min. Gehen täglich</b></li>
+        <li>Ausrutscher = <b>nächste Mahlzeit normal</b>, nie „ab Montag"</li>
+      </ul></div>
+    </details>
+
+    <details>
+      <summary>Einkaufsliste – immer im Haus</summary>
+      <div class="dbody">
+        <h3>Kühlschrank</h3>
+        <ul><li>Skyr / Magerquark / Hüttenkäse</li><li>Feta &amp; Mozzarella</li><li>Eier</li><li>Cherrytomaten, Gurken, Gewürzgurken</li><li>Buttermilch</li><li>Hähnchenaufschnitt</li><li>Wraps &amp; Vollkornbrot</li></ul>
+        <h3>Tiefkühler</h3>
+        <ul><li>TK-Gemüse (Pfannenmischung, Brokkoli, Spinat)</li><li>Hähnchenstreifen oder Garnelen</li><li>Beeren</li></ul>
+        <h3>Vorrat</h3>
+        <ul><li>Linsen, Kichererbsen, weiße Bohnen (Dose)</li><li>Passierte Tomaten</li><li>Reis (vorkochen &amp; kühlen) oder Express-Reis</li><li>Nüsse (portioniert!)</li><li>Dunkle Schokolade ≥70 % (fürs Budget)</li></ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>Sofort-Puffer beim Heimkommen</summary>
+      <div class="dbody">
+        <span class="pill">0 Minuten</span> Erst Puffer, dann in Ruhe kochen – nie hungrig entscheiden:
+        <ul><li>Ein paar Löffel Skyr oder Hüttenkäse</li><li>Cherrytomaten / Gewürzgurken</li><li>Glas Buttermilch</li><li>Handvoll Nüsse (abgezählt)</li></ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>10-Minuten-Gerichte (abends)</summary>
+      <div class="dbody"><ul>
+        <li><b>Omelett/Rührei</b> mit TK-Gemüse und Feta</li>
+        <li><b>Kichererbsen-Salat:</b> Dose abspülen + Tomaten, Feta, Olivenöl, Zitrone</li>
+        <li><b>TK-Gemüsepfanne</b> mit Hähnchenstreifen oder Garnelen, Sojasauce, dazu Reis</li>
+        <li><b>Wraps</b> mit Hähnchenaufschnitt oder Hüttenkäse + Rohkost</li>
+        <li><b>Linsen aus der Dose</b> mit passierten Tomaten und Feta oder Würstchen</li>
+        <li><b>Vollkornbrot</b> mit Hüttenkäse und Gurke</li>
+        <li><b>Ofen-Feta</b> mit Kirschtomaten (15 Min., null Arbeit)</li>
+      </ul></div>
+    </details>
+
+    <details>
+      <summary>Homeoffice-Mittag</summary>
+      <div class="dbody"><ul>
+        <li>Omelett mit Spinat und Feta</li>
+        <li>Quark-Bowl: Skyr + TK-Beeren + Nüsse</li>
+        <li>Wrap mit Hüttenkäse und Rohkost</li>
+        <li>Reste vom Vorabend (beim Kochen 1 Portion extra machen!)</li>
+        <li>Linsen- oder Kichererbsen-Salat</li>
+      </ul>
+      Gleiche Regel wie überall: Protein als Anker, dann bleibt das Nachmittags-Craving aus.</div>
+    </details>
+
+    <details>
+      <summary>Kantine &amp; Bäcker</summary>
+      <div class="dbody">
+        <h3>Kantine (montags Wochenplan checken)</h3>
+        <ul><li><b>Salat mit Hühnchen</b> – erste Wahl, Dressing sparsam (Essig/Öl)</li>
+        <li><b>Eintopf</b> – v.a. Linsen, Erbsen, Gulasch</li>
+        <li><b>Schnitzel + Pommes</b> – max. 1×/Woche, Pommes halb</li></ul>
+        <h3>Bäcker-Tage</h3>
+        <ul><li>Laugenstange ok + <b>Protein aus dem Supermarkt</b>: Skyr-Drink, Proteinjoghurt, Hüttenkäse, Mozzarella-Snack</li>
+        <li>Nussecke = Tages-Süßbudget (dann abends nichts mehr)</li></ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>Anlässe &amp; Alkohol</summary>
+      <div class="dbody"><ul>
+        <li>Vor dem Abend eine Drink-Zahl festlegen</li>
+        <li>Zwischen den Drinks ein Wasser</li>
+        <li>Kein Knabberzeug in Reichweite beim Trinken</li>
+        <li>Nächster Tag: ganz normal weiter – der Abend kostet 200 g, das „jetzt ist eh egal"-Wochenende ein Kilo</li>
+      </ul></div>
+    </details>
+  </div>
+</div>
+
+<nav class="tabbar">
+  <button data-tab="gewicht" class="active"><span class="ico">⚖️</span>Gewicht</button>
+  <button data-tab="budget"><span class="ico">🍫</span>Budget</button>
+  <button data-tab="notizen"><span class="ico">📝</span>Notizen</button>
+  <button data-tab="ratgeber"><span class="ico">🛒</span>Ratgeber</button>
+</nav>
+
+<script>
+(function(){
+"use strict";
+var START = 107, GOAL = 85;
+var MILESTONES = [{v:99,label:"unter 100"},{v:95,label:"unter 95"},{v:90,label:"unter 90"},{v:85,label:"Ziel: 85"}];
+
+function load(key, fallback){ try { var v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch(e){ return fallback; } }
+function save(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
+
+var weights = load("wt.weights", {});   // {"2026-08-02": 106.8}
+var sweets  = load("wt.sweets", {});    // {"2026-08-02": 1}
+var notes   = load("wt.notes", {});     // {"2026-W31": "text"}
+
+function todayStr(){ var d = new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function fmt(d){ return d.split("-").reverse().join("."); }
+function isoWeek(dateStr){
+  var d = new Date(dateStr+"T12:00:00");
+  var day = (d.getDay()+6)%7;
+  d.setDate(d.getDate()-day+3);
+  var firstThu = new Date(d.getFullYear(),0,4);
+  var fday = (firstThu.getDay()+6)%7;
+  firstThu.setDate(firstThu.getDate()-fday+3);
+  var wk = 1 + Math.round((d - firstThu)/(7*86400000));
+  return d.getFullYear()+"-W"+String(wk).padStart(2,"0");
+}
+function sortedDates(obj){ return Object.keys(obj).sort(); }
+function shiftDate(ds, n){ var d = new Date(ds+"T12:00:00"); d.setDate(d.getDate()+n); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+
+function avgLastNDays(endDateStr, n){
+  var end = new Date(endDateStr+"T12:00:00");
+  var vals = [];
+  for(var i=0;i<n;i++){
+    var d = new Date(end); d.setDate(d.getDate()-i);
+    var key = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+    if(weights[key] != null) vals.push(weights[key]);
+  }
+  if(!vals.length) return null;
+  return vals.reduce(function(a,b){return a+b;},0)/vals.length;
+}
+
+/* ---- Tabs ---- */
+var tabButtons = document.querySelectorAll(".tabbar button");
+tabButtons.forEach(function(btn){
+  btn.addEventListener("click", function(){
+    tabButtons.forEach(function(b){ b.classList.remove("active"); });
+    btn.classList.add("active");
+    document.querySelectorAll(".tab").forEach(function(t){ t.classList.remove("active"); });
+    document.getElementById("tab-"+btn.dataset.tab).classList.add("active");
+    if(btn.dataset.tab === "gewicht" && chart){ chart.resize(); }
+  });
+});
+
+/* ---- Gewicht ---- */
+document.getElementById("wDate").value = todayStr();
+document.getElementById("wSave").addEventListener("click", function(){
+  var d = document.getElementById("wDate").value;
+  var kg = parseFloat(document.getElementById("wKg").value);
+  if(!d || isNaN(kg) || kg < 40 || kg > 250){ alert("Bitte gültiges Gewicht eingeben."); return; }
+  weights[d] = Math.round(kg*10)/10;
+  save("wt.weights", weights);
+  document.getElementById("wKg").value = "";
+  renderWeight();
+  renderCoach();
+});
+
+var chart = null;
+function renderWeight(){
+  var dates = sortedDates(weights);
+  var avgEl = document.getElementById("avgNow");
+  var trendEl = document.getElementById("trendTxt");
+  var badgeEl = document.getElementById("badges");
+  var cur = dates.length ? avgLastNDays(dates[dates.length-1], 7) : null;
+
+  if(cur == null){
+    avgEl.textContent = "–";
+    trendEl.textContent = "";
+    document.getElementById("progBar").style.width = "0%";
+  } else {
+    avgEl.textContent = cur.toFixed(1) + " kg";
+    var lastDate = new Date(dates[dates.length-1]+"T12:00:00");
+    lastDate.setDate(lastDate.getDate()-7);
+    var prevKey = lastDate.getFullYear()+"-"+String(lastDate.getMonth()+1).padStart(2,"0")+"-"+String(lastDate.getDate()).padStart(2,"0");
+    var prev = avgLastNDays(prevKey, 7);
+    if(prev != null){
+      var diff = cur - prev;
+      trendEl.textContent = (diff <= 0 ? "▼ " : "▲ ") + Math.abs(diff).toFixed(1) + " kg/Woche";
+      trendEl.className = "trend " + (diff <= 0 ? "down" : "up");
+    } else { trendEl.textContent = ""; }
+    var pct = Math.max(0, Math.min(100, (START - cur) / (START - GOAL) * 100));
+    document.getElementById("progBar").style.width = pct + "%";
+  }
+
+  badgeEl.innerHTML = MILESTONES.map(function(m){
+    var done = cur != null && cur < m.v;
+    return '<span class="badge '+(done?"done":"open")+'">'+(done?"✓ ":"")+m.label+"</span>";
+  }).join("");
+
+  var listEl = document.getElementById("wList");
+  var recent = dates.slice(-10).reverse();
+  listEl.innerHTML = recent.length ? recent.map(function(d){
+    return '<div class="listItem"><span>'+fmt(d)+'</span><span><b>'+weights[d].toFixed(1)+' kg</b> <button class="del" data-d="'+d+'">✕</button></span></div>';
+  }).join("") : '<div class="muted">Noch keine Einträge – trag dein heutiges Gewicht ein.</div>';
+  listEl.querySelectorAll(".del").forEach(function(b){
+    b.addEventListener("click", function(){
+      delete weights[b.dataset.d]; save("wt.weights", weights); renderWeight();
+    });
+  });
+
+  renderChart(dates);
+}
+
+function renderChart(dates){
+  var show = dates.slice(-90);
+  var raw = show.map(function(d){ return weights[d]; });
+  var avg = show.map(function(d){ return avgLastNDays(d,7); });
+  var labels = show.map(function(d){ var p=d.split("-"); return p[2]+"."+p[1]+"."; });
+  var ctx = document.getElementById("chart").getContext("2d");
+  if(chart) chart.destroy();
+  chart = new Chart(ctx, {
+    type: "line",
+    data: { labels: labels, datasets: [
+      { label:"Täglich", data: raw, borderColor:"#c3cbd8", backgroundColor:"#c3cbd8", pointRadius:3, borderWidth:0, showLine:false },
+      { label:"7-Tage-Schnitt", data: avg, borderColor:"#2563eb", backgroundColor:"#2563eb", pointRadius:0, borderWidth:2.5, tension:0.3 },
+      { label:"Ziel", data: labels.map(function(){return GOAL;}), borderColor:"#16a34a", borderDash:[6,5], pointRadius:0, borderWidth:1.5 }
+    ]},
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction:{mode:"index",intersect:false},
+      plugins:{ legend:{labels:{boxWidth:14,font:{size:11}}} },
+      scales:{ y:{ suggestedMin: GOAL-2, suggestedMax: START+1 }, x:{ ticks:{ maxTicksLimit:6, font:{size:10} } } }
+    }
+  });
+}
+
+/* ---- Budget ---- */
+function renderSweets(){
+  var t = todayStr();
+  var n = sweets[t] || 0;
+  document.getElementById("sweetNum").textContent = n;
+  var st = document.getElementById("sweetStatus");
+  if(n === 0){ st.textContent = "Budget noch frei"; st.className = "statusLine none-t"; }
+  else if(n === 1){ st.textContent = "✓ Budget genutzt – im Rahmen"; st.className = "statusLine ok-t"; }
+  else { st.textContent = "Budget überzogen – nächste Mahlzeit normal, kein Drama"; st.className = "statusLine over-t"; }
+
+  var dots = document.getElementById("sweetDots");
+  var html = "";
+  for(var i=13;i>=0;i--){
+    var d = new Date(); d.setDate(d.getDate()-i);
+    var key = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+    var v = sweets[key];
+    var cls = (v == null) ? "none" : (v <= 1 ? "ok" : "over");
+    html += '<div class="dot '+cls+'" title="'+fmt(key)+'">'+d.getDate()+"</div>";
+  }
+  dots.innerHTML = html;
+}
+document.getElementById("plus").addEventListener("click", function(){
+  var t = todayStr(); sweets[t] = (sweets[t]||0)+1; save("wt.sweets", sweets); renderSweets(); renderCoach();
+});
+document.getElementById("minus").addEventListener("click", function(){
+  var t = todayStr(); sweets[t] = Math.max(0,(sweets[t]||0)-1); save("wt.sweets", sweets); renderSweets(); renderCoach();
+});
+
+/* ---- Notizen ---- */
+var curWeek = isoWeek(todayStr());
+document.getElementById("noteWeekTitle").textContent = "Notiz für Woche " + curWeek.split("-W")[1];
+document.getElementById("noteText").value = notes[curWeek] || "";
+document.getElementById("noteSave").addEventListener("click", function(){
+  var txt = document.getElementById("noteText").value.trim();
+  if(txt){ notes[curWeek] = txt; } else { delete notes[curWeek]; }
+  save("wt.notes", notes);
+  renderNotes();
+});
+function weekAvg(weekKey){
+  var vals = [];
+  Object.keys(weights).forEach(function(d){ if(isoWeek(d) === weekKey) vals.push(weights[d]); });
+  if(!vals.length) return null;
+  return vals.reduce(function(a,b){return a+b;},0)/vals.length;
+}
+function renderNotes(){
+  var keys = Object.keys(notes).sort().reverse().filter(function(k){ return k !== curWeek; });
+  var el = document.getElementById("noteList");
+  if(!keys.length){ el.innerHTML = '<div class="muted">Noch keine früheren Notizen.</div>'; return; }
+  el.innerHTML = keys.map(function(k){
+    var a = weekAvg(k);
+    return '<div class="listItem" style="flex-direction:column;align-items:flex-start;gap:4px">'+
+      '<div><b>Woche '+k.split("-W")[1]+'</b>'+(a!=null?' <span class="muted">· Ø '+a.toFixed(1)+' kg</span>':'')+'</div>'+
+      '<div style="font-size:.85rem;white-space:pre-wrap">'+notes[k].replace(/</g,"&lt;")+'</div></div>';
+  }).join("");
+}
+
+/* ---- Coach ---- */
+function renderCoach(){
+  var tips = [];
+  var dates = sortedDates(weights);
+  var today = todayStr();
+  var cur = dates.length ? avgLastNDays(dates[dates.length-1],7) : null;
+  var prev = null;
+  if(cur == null){
+    tips.push("⚖️ Starte mit deinem ersten Gewichtseintrag – ab einer Woche Daten gibt es hier automatische Auswertungen deines Trends.");
+  } else {
+    var last = dates[dates.length-1];
+    prev = avgLastNDays(shiftDate(last,-7),7);
+    if(prev != null){
+      var diff = cur - prev;
+      if(diff <= -1.2) tips.push("⚠️ Über 1 kg Verlust diese Woche – auf Dauer zu schnell (Muskelabbau, Jojo-Risiko). Nichts weiter verschärfen, Protein hochhalten. Ziel: 0,3–0,5 kg/Woche.");
+      else if(diff <= -0.2) tips.push("✅ Tempo perfekt: −"+Math.abs(diff).toFixed(1)+" kg im Wochenschnitt. Genau so weiter – ändere nichts.");
+      else if(diff < 0.2){
+        var prev3 = avgLastNDays(shiftDate(last,-21),7);
+        if(prev3 != null && Math.abs(cur - prev3) < 0.4)
+          tips.push("⏸️ Plateau seit ~3 Wochen. Jetzt EINE Stellschraube ändern: Abendsnack streichen ODER Beilagen konsequenter halbieren ODER Gehzeit auf 25 Min. Nicht alles gleichzeitig.");
+        else
+          tips.push("Stillstand diese Woche – normal (Wasser, Salz, Verdauung). Regel: erst nach 3 Wochen ohne Bewegung etwas ändern.");
+      }
+      else tips.push("📈 Wochenschnitt leicht rauf. Kein Drama – prüfe die drei Klassiker: Nachschläge, Anlässe mit Alkohol, Süß-Budget. Nächste Mahlzeit normal, nicht „ab Montag“.");
+    }
+    for(var i=0;i<MILESTONES.length;i++){
+      if(cur < MILESTONES[i].v){
+        if(prev != null && prev >= MILESTONES[i].v) tips.push("🎉 Etappenziel geschafft: "+MILESTONES[i].label+"! Feiern – aber nicht mit Essen. Nach 10–12 Wochen Abnehmen steht eine 2-Wochen-Haltepause an.");
+        break;
+      }
+    }
+  }
+  var over=0, okDays=0;
+  for(var i=0;i<7;i++){ var v=sweets[shiftDate(today,-i)]; if(v!=null){ if(v<=1) okDays++; else over++; } }
+  if(over >= 3) tips.push("🍫 "+over+"× Budget überzogen in 7 Tagen. Dahinter steckt meist ein zu leichtes Mittagessen – checke dein Mittags-Protein (Skyr-Drink zum Bäcker!).");
+  else if(okDays >= 6) tips.push("🍫 Süß-Budget "+okDays+"/7 Tage gehalten – stark. Diese Konstanz schlägt jede Diät.");
+  var missing=0;
+  for(var i=0;i<7;i++){ if(weights[shiftDate(today,-i)]==null) missing++; }
+  if(dates.length && missing >= 4) tips.push("⚖️ Nur "+(7-missing)+"× gewogen in 7 Tagen. Täglich wiegen macht den Wochenschnitt verlässlich – einzelne Ausreißer sind egal.");
+  if(new Date().getDay() === 0) tips.push("📝 Sonntag = Check-in: Wochennotiz schreiben und im Tab „Notizen“ die Daten für Claude kopieren – für deine persönliche Analyse.");
+  var pool = [
+    "Protein zuerst essen – der Rest der Mahlzeit reguliert sich fast von selbst.",
+    "Besteck zwischen den Bissen ablegen. Sättigung braucht 20 Minuten Vorsprung.",
+    "Beim Heimkommen: erst Sofort-Puffer (Skyr, Tomaten), dann in Ruhe kochen.",
+    "Der 15-Minuten-Spaziergang nach dem Abendessen killt die Snack-Stunde gleich mit.",
+    "Craving = 10 Minuten Timer + Ortswechsel. Danach darfst du immer noch.",
+    "Ein Ausrutscher kostet 200 g. Das „jetzt ist eh egal“ danach kostet ein Kilo.",
+    "Ein großes Glas Wasser vor der Mahlzeit nimmt spürbar Druck vom Hunger.",
+    "Montag: Kantinenplan checken und die Salat-/Eintopf-Tage der Woche festlegen.",
+    "Mahlzeit unsicher? Foto an die Claude-App schicken – Anleitung im Tab Ratgeber."
+  ];
+  var dayIdx = Math.floor(Date.now()/86400000);
+  tips.push("💡 " + pool[dayIdx % pool.length]);
+  document.getElementById("coachTips").innerHTML = tips.slice(0,3).map(function(t){ return "<div>"+t+"</div>"; }).join("");
+}
+
+/* ---- Export für Claude ---- */
+function buildExport(){
+  var dates = sortedDates(weights);
+  var lines = ["Meine Abnehm-Daten (Start: 107 kg, Ziel: 85 kg, 183 cm). Bitte analysiere Trend und Muster und gib mir 3 konkrete neue Ratschläge. Meine Regeln: 2 Mahlzeiten/Tag mit Protein-Anker, 1 Süßigkeit/Tag als Budget, Kantine (Salat mit Hühnchen/Eintopf/Schnitzel) oder Bäcker + Supermarkt-Protein, Alkohol nur zu Anlässen.",""];
+  var start = shiftDate(todayStr(), -27);
+  var recent = dates.filter(function(d){ return d >= start; });
+  lines.push("Gewicht (letzte 4 Wochen):");
+  if(recent.length){ recent.forEach(function(d){ lines.push(d+": "+weights[d].toFixed(1)+" kg"); }); }
+  else lines.push("(noch keine Einträge)");
+  var cur = dates.length ? avgLastNDays(dates[dates.length-1],7) : null;
+  if(cur != null) lines.push("Aktueller 7-Tage-Schnitt: "+cur.toFixed(1)+" kg");
+  var ok=0, ov=0, none=0;
+  for(var i=0;i<14;i++){ var v=sweets[shiftDate(todayStr(),-i)]; if(v==null) none++; else if(v<=1) ok++; else ov++; }
+  lines.push("");
+  lines.push("Süß-Budget letzte 14 Tage: "+ok+"× gehalten, "+ov+"× überzogen, "+none+"× nicht erfasst");
+  var wk = isoWeek(todayStr());
+  var noteKeys = Object.keys(notes).sort().reverse().slice(0,4);
+  if(noteKeys.length){ lines.push(""); lines.push("Wochen-Notizen:"); noteKeys.forEach(function(k){ lines.push(k+": "+notes[k]); }); }
+  return lines.join("\n");
+}
+function copyText(t){
+  if(navigator.clipboard && navigator.clipboard.writeText){ return navigator.clipboard.writeText(t); }
+  var ta = document.createElement("textarea"); ta.value = t;
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand("copy"); } catch(e){}
+  document.body.removeChild(ta);
+  return Promise.resolve();
+}
+document.getElementById("exportBtn").addEventListener("click", function(){
+  copyText(buildExport()).then(function(){
+    document.getElementById("exportDone").textContent = "✓ Kopiert – jetzt in der Claude-App einfügen";
+  }, function(){
+    document.getElementById("exportDone").textContent = "Kopieren fehlgeschlagen – bitte erneut versuchen";
+  });
+});
+
+/* ---- Backup ---- */
+document.getElementById("bkExport").addEventListener("click", function(){
+  var data = JSON.stringify({ v:1, exported: todayStr(), weights: weights, sweets: sweets, notes: notes });
+  copyText(data).then(function(){
+    document.getElementById("bkMsg").textContent = "✓ Backup kopiert – sicher ablegen (z.B. Apple Notizen)";
+  });
+});
+document.getElementById("bkImport").addEventListener("click", function(){
+  var txt = document.getElementById("bkText").value.trim();
+  if(!txt){ document.getElementById("bkMsg").textContent = "Bitte erst Backup-Text einfügen."; return; }
+  try {
+    var data = JSON.parse(txt);
+    if(!data || typeof data !== "object" || !data.weights) throw new Error("bad");
+    if(!confirm("Backup wiederherstellen? Vorhandene Einträge werden zusammengeführt (Backup gewinnt bei Konflikten).")) return;
+    Object.keys(data.weights || {}).forEach(function(k){ weights[k] = data.weights[k]; });
+    Object.keys(data.sweets || {}).forEach(function(k){ sweets[k] = data.sweets[k]; });
+    Object.keys(data.notes || {}).forEach(function(k){ notes[k] = data.notes[k]; });
+    save("wt.weights", weights); save("wt.sweets", sweets); save("wt.notes", notes);
+    document.getElementById("bkText").value = "";
+    document.getElementById("bkMsg").textContent = "✓ Wiederhergestellt";
+    renderWeight(); renderSweets(); renderNotes(); renderCoach();
+  } catch(e){
+    document.getElementById("bkMsg").textContent = "Ungültiges Backup – bitte kompletten Text einfügen.";
+  }
+});
+
+renderWeight();
+renderSweets();
+renderNotes();
+renderCoach();
+})();
+</script>
+</body>
+</html>
