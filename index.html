@@ -144,12 +144,15 @@ details[open] summary::after{content:"▴"}
 
     <div class="card">
       <h2>📸 Mahlzeit per Foto erfassen</h2>
-      <input type="text" id="mealHint" placeholder="Optionaler Hinweis: z.B. halbe Portion, 300 g, das ist Skyr…" style="margin-bottom:8px">
       <label class="plabel" for="mealPhoto">Foto(s) aufnehmen / auswählen</label>
       <input type="file" id="mealPhoto" accept="image/*" multiple style="display:none">
       <div class="muted" style="margin-top:6px;text-align:center">Mehrere Fotos derselben Mahlzeit möglich (max. 4)</div>
       <div class="muted" id="mealStatus" style="margin-top:8px;text-align:center"></div>
       <div id="mealResult" style="margin-top:8px;font-size:.9rem;line-height:1.5"></div>
+      <div id="fixBox" style="display:none;margin-top:10px">
+        <input type="text" id="fixText" placeholder="Stimmt was nicht? z.B. es waren 2 Schnitzel, nur halbe Portion…">
+        <button class="ghost" style="width:100%;margin-top:8px" id="fixSend">Korrigieren &amp; neu schätzen</button>
+      </div>
     </div>
 
     <div class="card">
@@ -770,6 +773,69 @@ function resizeImage(file){
   });
 }
 
+var lastPhotos = null, lastIdx = -1, lastResult = null;
+
+function runAnalysis(b64s, correction){
+  var st = document.getElementById("mealStatus");
+  var res = document.getElementById("mealResult");
+  st.textContent = correction ? "Korrigiere Schätzung …" : (b64s.length > 1 ? "Analysiere " + b64s.length + " Fotos …" : "Analysiere Foto …");
+  var content = b64s.map(function(b64){
+    return { type: "image", source: { type: "base64", media_type: "image/jpeg", data: b64 } };
+  });
+  var txt = "Analysiere diese Mahlzeit.";
+  if(b64s.length > 1) txt += " Alle Fotos zeigen DIESELBE Mahlzeit (verschiedene Winkel oder Bestandteile) – schätze die Gesamtmenge nur einmal.";
+  if(correction) txt += " Deine vorherige Schaetzung war: " + JSON.stringify(lastResult) + ". Der Nutzer korrigiert dich: \"" + correction + "\". Die Korrektur des Nutzers hat Vorrang vor deiner Bildeinschaetzung – schaetze damit neu.";
+  content.push({ type: "text", text: txt });
+  fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": cfg.key,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true"
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 400,
+      system: "Du bist ein Ernaehrungs-Schaetzer fuer eine Abnehm-App. Der Nutzer (m, 183 cm, Ziel 85 kg) fotografiert seine Mahlzeit. Schaetze realistisch Kalorien und Protein der GESAMTEN sichtbaren Portion. Korrekturen des Nutzers haben immer Vorrang. Antworte AUSSCHLIESSLICH mit einem JSON-Objekt: {\"gericht\":\"kurzer Name\",\"kcal\":Zahl,\"protein_g\":Zahl,\"einschaetzung\":\"1 Satz: passt die Mahlzeit zu seinen Regeln (Protein-Anker, Beilagen halbieren)?\",\"tipp\":\"1 kurzer konkreter Verbesserungstipp oder Lob\"}",
+      messages: [{ role: "user", content: content }]
+    })
+  }).then(function(r){
+    if(r.status === 401) throw new Error("API-Schlüssel ungültig – bitte in den Einstellungen prüfen.");
+    if(r.status === 400) throw new Error("Anfrage abgelehnt – evtl. kein Guthaben auf dem API-Konto?");
+    if(!r.ok) throw new Error("Fehler " + r.status + " – bitte später erneut versuchen.");
+    return r.json();
+  }).then(function(data){
+    var t = (data.content && data.content[0] && data.content[0].text) || "";
+    var m = t.match(/\{[\s\S]*\}/);
+    if(!m) throw new Error("Antwort nicht lesbar – bitte nochmal versuchen.");
+    var j = JSON.parse(m[0]);
+    lastResult = j;
+    var arr = meals[todayStr()] || [];
+    if(correction && lastIdx >= 0 && arr[lastIdx]){
+      arr[lastIdx].name = j.gericht || arr[lastIdx].name;
+      arr[lastIdx].kcal = Math.round(j.kcal || 0);
+      arr[lastIdx].p = j.protein_g || 0;
+      save("wt.meals", meals);
+      renderMeals();
+    } else {
+      addMeal(j.gericht || "Mahlzeit", j.kcal || 0, j.protein_g || 0);
+      lastIdx = (meals[todayStr()] || []).length - 1;
+    }
+    var act = activity[todayStr()] || 0;
+    var left = cfg.kcal + Math.round(act * 0.5) - todayMeals().reduce(function(s, x){ return s + x.kcal; }, 0);
+    st.textContent = "";
+    res.innerHTML = "<b>" + (j.gericht || "Mahlzeit") + "</b>: ca. " + j.kcal + " kcal, " + j.protein_g + " g Protein" + (correction ? " <span class='muted'>(korrigiert)</span>" : "") + "<br>" +
+      (j.einschaetzung ? j.einschaetzung + "<br>" : "") +
+      (j.tipp ? "💡 " + j.tipp + "<br>" : "") +
+      (left >= 0 ? "Heute noch übrig: <b>" + left + " kcal</b>" : "<b style='color:var(--red)'>Budget um " + Math.abs(left) + " kcal überzogen</b> – morgen normal weiter, kein Drama.");
+    document.getElementById("fixBox").style.display = "block";
+    document.getElementById("fixText").value = "";
+  }).catch(function(e){
+    st.textContent = e.message || "Analyse fehlgeschlagen.";
+  });
+}
+
 document.getElementById("mealPhoto").addEventListener("change", function(){
   var files = Array.prototype.slice.call(this.files || []).slice(0, 4);
   this.value = "";
@@ -778,55 +844,23 @@ document.getElementById("mealPhoto").addEventListener("change", function(){
     document.getElementById("mealStatus").textContent = "Bitte zuerst unten in den Einstellungen den API-Schlüssel eintragen.";
     return;
   }
-  var hint = document.getElementById("mealHint").value.trim();
-  var st = document.getElementById("mealStatus");
-  var res = document.getElementById("mealResult");
-  res.innerHTML = "";
-  st.textContent = files.length > 1 ? "Analysiere " + files.length + " Fotos …" : "Analysiere Foto …";
+  document.getElementById("mealResult").innerHTML = "";
+  document.getElementById("fixBox").style.display = "none";
   Promise.all(files.map(resizeImage)).then(function(b64s){
-    var content = b64s.map(function(b64){
-      return { type: "image", source: { type: "base64", media_type: "image/jpeg", data: b64 } };
-    });
-    var txt = "Analysiere diese Mahlzeit.";
-    if(b64s.length > 1) txt += " Alle Fotos zeigen DIESELBE Mahlzeit (verschiedene Winkel oder Bestandteile) – schätze die Gesamtmenge nur einmal.";
-    if(hint) txt += " Wichtiger Hinweis vom Nutzer, hat Vorrang vor deiner Bildeinschätzung: " + hint;
-    content.push({ type: "text", text: txt });
-    return fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": cfg.key,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true"
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 400,
-        system: "Du bist ein Ernaehrungs-Schaetzer fuer eine Abnehm-App. Der Nutzer (m, 183 cm, Ziel 85 kg) fotografiert seine Mahlzeit. Schaetze realistisch Kalorien und Protein der GESAMTEN sichtbaren Portion. Wenn der Nutzer einen Hinweis mitgibt (Menge, Zutat, Korrektur), richte dich danach. Antworte AUSSCHLIESSLICH mit einem JSON-Objekt: {\"gericht\":\"kurzer Name\",\"kcal\":Zahl,\"protein_g\":Zahl,\"einschaetzung\":\"1 Satz: passt die Mahlzeit zu seinen Regeln (Protein-Anker, Beilagen halbieren)?\",\"tipp\":\"1 kurzer konkreter Verbesserungstipp oder Lob\"}",
-        messages: [{ role: "user", content: content }]
-      })
-    });
-  }).then(function(r){
-    if(r.status === 401) throw new Error("API-Schlüssel ungültig – bitte in den Einstellungen prüfen.");
-    if(r.status === 400) throw new Error("Anfrage abgelehnt – evtl. kein Guthaben auf dem API-Konto?");
-    if(!r.ok) throw new Error("Fehler " + r.status + " – bitte später erneut versuchen.");
-    return r.json();
-  }).then(function(data){
-    var txt = (data.content && data.content[0] && data.content[0].text) || "";
-    var m = txt.match(/\{[\s\S]*\}/);
-    if(!m) throw new Error("Antwort nicht lesbar – bitte nochmal versuchen.");
-    var j = JSON.parse(m[0]);
-    addMeal(j.gericht || "Mahlzeit", j.kcal || 0, j.protein_g || 0);
-    document.getElementById("mealHint").value = "";
-    var left = cfg.kcal - todayMeals().reduce(function(s, x){ return s + x.kcal; }, 0);
-    st.textContent = "";
-    res.innerHTML = "<b>" + (j.gericht || "Mahlzeit") + "</b>: ca. " + j.kcal + " kcal, " + j.protein_g + " g Protein<br>" +
-      (j.einschaetzung ? j.einschaetzung + "<br>" : "") +
-      (j.tipp ? "💡 " + j.tipp + "<br>" : "") +
-      (left >= 0 ? "Heute noch übrig: <b>" + left + " kcal</b>" : "<b style='color:var(--red)'>Budget um " + Math.abs(left) + " kcal überzogen</b> – morgen normal weiter, kein Drama.");
-  }).catch(function(e){
-    st.textContent = e.message || "Analyse fehlgeschlagen.";
+    lastPhotos = b64s;
+    lastIdx = -1;
+    lastResult = null;
+    runAnalysis(b64s, null);
+  }, function(){
+    document.getElementById("mealStatus").textContent = "Foto konnte nicht gelesen werden.";
   });
+});
+
+document.getElementById("fixSend").addEventListener("click", function(){
+  var c = document.getElementById("fixText").value.trim();
+  if(!c){ document.getElementById("mealStatus").textContent = "Bitte erst die Korrektur eintippen."; return; }
+  if(!lastPhotos){ document.getElementById("mealStatus").textContent = "Kein Foto zum Korrigieren – bitte neu fotografieren."; return; }
+  runAnalysis(lastPhotos, c);
 });
 
 document.getElementById("actSave").addEventListener("click", function(){
