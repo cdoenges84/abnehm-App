@@ -277,7 +277,9 @@ details[open] summary::after{content:"▴"}
       <h2>🛒 Vorrats-Check für Alexa</h2>
       <div class="muted">Hake ab, was fehlt – dann kopieren (ein Artikel pro Zeile) und in die Alexa-App einfügen, oder einfach der Reihe nach an Alexa diktieren.</div>
       <div id="shopList" style="margin-top:8px"></div>
-      <button class="primary" style="width:100%;margin-top:10px" id="shopCopy">Liste kopieren</button>
+      <button class="primary" style="width:100%;margin-top:10px" id="shopSpeak">🔊 An Alexa vorsprechen</button>
+      <div class="muted" style="margin-top:6px;line-height:1.5">Handy laut stellen, neben den Echo legen, Knopf drücken – die App diktiert Alexa jeden Artikel einzeln.</div>
+      <button class="ghost" style="width:100%;margin-top:10px" id="shopCopy">Liste kopieren (eine Zeile pro Artikel)</button>
       <button class="ghost" style="width:100%;margin-top:8px" id="shopReset">Zurücksetzen</button>
       <div class="muted" id="shopMsg" style="margin-top:6px;text-align:center"></div>
     </div>
@@ -881,6 +883,47 @@ document.getElementById("shopCopy").addEventListener("click", function(){
 document.getElementById("shopReset").addEventListener("click", function(){
   shop = {}; save("wt.shop", shop); renderShop();
   document.getElementById("shopMsg").textContent = "Liste geleert.";
+});
+
+var speakActive = false;
+function speechName(it){
+  return it.split("/")[0].replace(/\(.*?\)/g, "").replace("TK-", "").replace("70%", "").trim();
+}
+document.getElementById("shopSpeak").addEventListener("click", function(){
+  var btn = this;
+  var msg = document.getElementById("shopMsg");
+  if(speakActive){
+    speakActive = false;
+    window.speechSynthesis.cancel();
+    btn.textContent = "🔊 An Alexa vorsprechen";
+    msg.textContent = "Gestoppt.";
+    return;
+  }
+  var sel = SHOP_ITEMS.filter(function(it){ return shop[it]; });
+  if(!sel.length){ msg.textContent = "Nichts angehakt."; return; }
+  if(!("speechSynthesis" in window)){ msg.textContent = "Sprachausgabe wird auf diesem Gerät nicht unterstützt."; return; }
+  speakActive = true;
+  btn.textContent = "⏹ Stopp";
+  var idx = 0;
+  function next(){
+    if(!speakActive || idx >= sel.length){
+      speakActive = false;
+      btn.textContent = "🔊 An Alexa vorsprechen";
+      msg.textContent = idx >= sel.length ? "✓ Fertig – " + sel.length + " Artikel an Alexa übergeben" : msg.textContent;
+      return;
+    }
+    var it = sel[idx];
+    idx++;
+    msg.textContent = "Spreche " + idx + "/" + sel.length + ": " + it;
+    var u = new SpeechSynthesisUtterance("Alexa, setze " + speechName(it) + " auf die Einkaufsliste.");
+    u.lang = "de-DE";
+    u.rate = 0.95;
+    u.volume = 1;
+    u.onend = function(){ setTimeout(next, 4500); };
+    u.onerror = function(){ setTimeout(next, 4500); };
+    window.speechSynthesis.speak(u);
+  }
+  next();
 });
 
 /* ---- Backup ---- */
