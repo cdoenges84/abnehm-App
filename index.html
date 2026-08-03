@@ -166,11 +166,14 @@ details[open] summary::after{content:"▴"}
 
     <div class="card">
       <h2>Manuell nachtragen</h2>
+      <input type="text" id="mName" placeholder="z.B. Kaffee mit Milch, 2 Kugeln Eis…" style="margin-bottom:8px">
+      <button class="primary" style="width:100%;margin-bottom:8px" id="mSuggest">Kalorien-Vorschlag holen</button>
       <div class="row" style="margin-bottom:8px">
-        <input type="text" id="mName" placeholder="z.B. Salat mit Hühnchen" style="flex:2;font-size:1rem;padding:12px;border:1px solid var(--line);border-radius:10px;background:#fbfbfc">
         <input type="number" id="mKcal" placeholder="kcal" inputmode="numeric" style="flex:1">
+        <input type="number" id="mProt" placeholder="Protein g" inputmode="numeric" style="flex:1">
       </div>
       <button class="ghost" style="width:100%" id="mAdd">Hinzufügen</button>
+      <div class="muted" id="mMsg" style="margin-top:6px;text-align:center"></div>
     </div>
 
     <div class="card">
@@ -800,13 +803,53 @@ function addMeal(name, kcal, p){
   renderMeals();
 }
 
+document.getElementById("mSuggest").addEventListener("click", function(){
+  var name = document.getElementById("mName").value.trim();
+  var msg = document.getElementById("mMsg");
+  if(!name){ msg.textContent = "Bitte erst eingeben, was du gegessen hast."; return; }
+  if(!cfg.key){ msg.textContent = "Kein API-Schlüssel hinterlegt – Werte bitte selbst eintragen."; return; }
+  msg.textContent = "Schätze …";
+  fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": cfg.key,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true"
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 150,
+      system: "Du schaetzt Naehrwerte fuer eine Abnehm-App. Der Nutzer beschreibt eine Mahlzeit oder ein Getraenk in Textform. Nimm eine typische Portion an, falls keine Menge angegeben ist. Antworte AUSSCHLIESSLICH mit einem JSON-Objekt: {\"kcal\":Zahl,\"protein_g\":Zahl,\"annahme\":\"kurz: welche Portionsgroesse du angenommen hast\"}",
+      messages: [{ role: "user", content: name }]
+    })
+  }).then(function(r){
+    if(r.status === 401) throw new Error("API-Schlüssel ungültig.");
+    if(!r.ok) throw new Error("Fehler " + r.status + " – bitte erneut versuchen.");
+    return r.json();
+  }).then(function(data){
+    var t = (data.content && data.content[0] && data.content[0].text) || "";
+    var m = t.match(/\{[\s\S]*\}/);
+    if(!m) throw new Error("Antwort nicht lesbar.");
+    var j = JSON.parse(m[0]);
+    document.getElementById("mKcal").value = Math.round(j.kcal || 0);
+    document.getElementById("mProt").value = Math.round(j.protein_g || 0);
+    msg.textContent = "Vorschlag: " + Math.round(j.kcal || 0) + " kcal, " + Math.round(j.protein_g || 0) + " g Protein" + (j.annahme ? " (" + j.annahme + ")" : "") + " – anpassen oder hinzufügen.";
+  }).catch(function(e){
+    msg.textContent = e.message || "Schätzung fehlgeschlagen.";
+  });
+});
+
 document.getElementById("mAdd").addEventListener("click", function(){
   var name = document.getElementById("mName").value.trim();
   var kcal = parseInt(document.getElementById("mKcal").value);
-  if(!name || isNaN(kcal)){ alert("Bitte Name und kcal angeben."); return; }
-  addMeal(name, kcal, 0);
+  var p = parseFloat(document.getElementById("mProt").value);
+  if(!name || isNaN(kcal)){ document.getElementById("mMsg").textContent = "Bitte Name und kcal angeben (oder Vorschlag holen)."; return; }
+  addMeal(name, kcal, isNaN(p) ? 0 : p);
   document.getElementById("mName").value = "";
   document.getElementById("mKcal").value = "";
+  document.getElementById("mProt").value = "";
+  document.getElementById("mMsg").textContent = "✓ Eingetragen";
 });
 
 function resizeImage(file){
