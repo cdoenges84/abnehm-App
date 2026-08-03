@@ -130,7 +130,7 @@ details[open] summary::after{content:"▴"}
       <div class="progressOuter"><div class="progressInner" id="kcalBar" style="width:0%"></div></div>
       <div class="muted">Protein heute: <b id="protToday">0</b> / <span id="protTargetLbl">140</span> g</div>
       <div class="muted" id="bonusInfo"></div>
-      <button class="ghost" style="width:100%;margin-top:10px" id="dayCopy">📤 Tagesstatus für Coach kopieren</button>
+      <button class="ghost" style="width:100%;margin-top:10px" id="dayCopy">📤 Coach fragen: alle Daten kopieren</button>
       <div class="muted" id="dayCopyMsg" style="margin-top:6px;text-align:center"></div>
     </div>
 
@@ -874,29 +874,67 @@ document.getElementById("actSave").addEventListener("click", function(){
   renderMeals();
 });
 
-document.getElementById("dayCopy").addEventListener("click", function(){
+function buildCoachContext(){
+  var t = todayStr();
   var list = todayMeals();
   var kcal = 0, prot = 0;
   list.forEach(function(m){ kcal += m.kcal || 0; prot += m.p || 0; });
-  var act = activity[todayStr()] || 0;
+  var act = activity[t] || 0;
   var bonus = Math.round(act * 0.5);
   var left = cfg.kcal + bonus - kcal;
-  var sweet = sweets[todayStr()] || 0;
+  var sweet = sweets[t] || 0;
   var dates = sortedDates(weights);
   var avg = dates.length ? avgLastNDays(dates[dates.length - 1], 7) : null;
   var todayIdx = (new Date().getDay() + 6) % 7;
-  var planned = plan[todayIdx] || {};
-  var lines = ["Mein Tagesstatus aus der App (" + fmt(todayStr()) + "):"];
-  lines.push("Bisher gegessen: " + (list.length ? list.map(function(m){ return (m.t ? m.t + " " : "") + m.name + " (" + m.kcal + " kcal, " + Math.round(m.p || 0) + " g Protein)"; }).join("; ") : "noch nichts"));
-  lines.push("Summe: " + kcal + " kcal, " + Math.round(prot) + " g Protein.");
-  lines.push("Budget: " + cfg.kcal + " kcal" + (bonus ? " + " + bonus + " Bewegungsbonus (Aktivität " + act + " kcal)" : "") + " → noch " + left + " kcal übrig. Protein-Ziel " + cfg.prot + " g → es fehlen noch " + Math.max(0, cfg.prot - Math.round(prot)) + " g.");
-  lines.push("Süß-Budget heute: " + (sweet === 0 ? "noch frei" : sweet === 1 ? "genutzt" : "überzogen (" + sweet + ")") + ".");
-  if(avg != null) lines.push("Gewicht (7-Tage-Schnitt): " + avg.toFixed(1) + " kg.");
-  if(planned.a) lines.push("Laut Wochenplan heute Abend geplant: " + planned.a + ".");
+  var lines = ["Meine kompletten App-Daten (Stand " + fmt(t) + "):", "", "— HEUTE —"];
+  lines.push("Gegessen: " + (list.length ? list.map(function(m){ return (m.t ? m.t + " " : "") + m.name + " (" + m.kcal + " kcal, " + Math.round(m.p || 0) + " g P)"; }).join("; ") : "noch nichts"));
+  lines.push("Summe: " + kcal + " kcal, " + Math.round(prot) + " g Protein. Budget " + cfg.kcal + (bonus ? " + " + bonus + " Bewegungsbonus" : "") + " → noch " + left + " kcal. Protein-Ziel " + cfg.prot + " g → fehlen " + Math.max(0, cfg.prot - Math.round(prot)) + " g.");
+  lines.push("Süß-Budget: " + (sweet === 0 ? "noch frei" : sweet === 1 ? "genutzt" : "überzogen (" + sweet + ")") + (act ? ". Aktivität: " + act + " kcal." : "."));
+  lines.push("");
+  lines.push("— LETZTE 14 TAGE —");
+  for(var i = 1; i <= 14; i++){
+    var d = shiftDate(t, -i);
+    var parts = [];
+    if(weights[d] != null) parts.push(weights[d].toFixed(1) + " kg");
+    var ml = meals[d] || [];
+    if(ml.length){
+      var mk = 0, mp = 0;
+      ml.forEach(function(m){ mk += m.kcal || 0; mp += m.p || 0; });
+      parts.push(mk + " kcal, " + Math.round(mp) + " g P (" + ml.map(function(m){ return m.name; }).join(", ") + ")");
+    }
+    var sv = sweets[d];
+    if(sv != null) parts.push("Süß: " + (sv <= 1 ? "ok" : "überzogen (" + sv + ")"));
+    if(activity[d]) parts.push("Akt. " + activity[d] + " kcal");
+    if(parts.length) lines.push(fmt(d) + ": " + parts.join(" · "));
+  }
+  if(avg != null){
+    var prev = dates.length ? avgLastNDays(shiftDate(dates[dates.length - 1], -7), 7) : null;
+    lines.push("7-Tage-Schnitt: " + avg.toFixed(1) + " kg" + (prev != null ? " (Vorwoche: " + prev.toFixed(1) + " kg)" : "") + ". Start 107, Ziel 85.");
+  }
+  var noteKeys = Object.keys(notes).sort().reverse().slice(0, 4);
+  if(noteKeys.length){
+    lines.push("");
+    lines.push("— WOCHEN-NOTIZEN —");
+    noteKeys.forEach(function(k){ lines.push(k + ": " + notes[k]); });
+  }
+  var planLines = [];
+  DAYS.forEach(function(d, i){
+    var p = plan[i] || {};
+    if(p.m || p.a) planLines.push(d.slice(0, 2) + ": " + (p.m || "–") + " / " + (p.a || "–"));
+  });
+  if(planLines.length){
+    lines.push("");
+    lines.push("— WOCHENPLAN (Mittag/Frühstück / Abend) —");
+    planLines.forEach(function(l){ lines.push(l); });
+  }
   lines.push("");
   lines.push("Meine Frage: ");
-  copyText(lines.join("\n")).then(function(){
-    document.getElementById("dayCopyMsg").textContent = "✓ Kopiert – im Claude-Chat einfügen und Frage anhängen";
+  return lines.join("\n");
+}
+
+document.getElementById("dayCopy").addEventListener("click", function(){
+  copyText(buildCoachContext()).then(function(){
+    document.getElementById("dayCopyMsg").textContent = "✓ Kopiert – im Claude-Chat einfügen und beliebige Frage anhängen";
   });
 });
 
