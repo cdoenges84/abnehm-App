@@ -73,6 +73,8 @@ details[open] summary::after{content:"▴"}
 .shopItem{display:flex;align-items:center;gap:10px;padding:8px 2px;border-bottom:1px solid var(--line);font-size:.9rem}
 .shopItem:last-child{border-bottom:0}
 .shopItem input{width:20px;height:20px}
+.toast{position:fixed;bottom:calc(74px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:12px;display:flex;gap:14px;align-items:center;z-index:30;font-size:.88rem;box-shadow:0 4px 16px rgba(0,0,0,.25);white-space:nowrap}
+.toast button{background:none;border:0;color:#7cb3ff;font-weight:700;font-size:.9rem;cursor:pointer}
 </style>
 </head>
 <body>
@@ -375,6 +377,8 @@ details[open] summary::after{content:"▴"}
   </div>
 </div>
 
+<div id="undoToast" class="toast" style="display:none"><span id="undoMsg"></span><button id="undoBtn">Rückgängig</button></div>
+
 <nav class="tabbar">
   <button data-tab="gewicht" class="active"><span class="ico">⚖️</span>Gewicht</button>
   <button data-tab="essen"><span class="ico">🍽️</span>Essen</button>
@@ -411,6 +415,31 @@ function isoWeek(dateStr){
 }
 function sortedDates(obj){ return Object.keys(obj).sort(); }
 function shiftDate(ds, n){ var d = new Date(ds+"T12:00:00"); d.setDate(d.getDate()+n); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+
+/* ---- Undo ---- */
+var undoBuf = null, undoTimer = null;
+function showUndo(msg){
+  document.getElementById("undoMsg").textContent = msg;
+  document.getElementById("undoToast").style.display = "flex";
+  if(undoTimer) clearTimeout(undoTimer);
+  undoTimer = setTimeout(function(){ document.getElementById("undoToast").style.display = "none"; }, 8000);
+}
+document.getElementById("undoBtn").addEventListener("click", function(){
+  if(!undoBuf) return;
+  if(undoBuf.type === "weight"){
+    weights[undoBuf.date] = undoBuf.value;
+    save("wt.weights", weights);
+    renderWeight(); renderCoach();
+  } else if(undoBuf.type === "meal"){
+    var arr = meals[undoBuf.date] || [];
+    arr.splice(Math.min(undoBuf.index, arr.length), 0, undoBuf.item);
+    meals[undoBuf.date] = arr;
+    save("wt.meals", meals);
+    renderMeals();
+  }
+  undoBuf = null;
+  document.getElementById("undoToast").style.display = "none";
+});
 
 function avgLastNDays(endDateStr, n){
   var end = new Date(endDateStr+"T12:00:00");
@@ -488,7 +517,11 @@ function renderWeight(){
   }).join("") : '<div class="muted">Noch keine Einträge – trag dein heutiges Gewicht ein.</div>';
   listEl.querySelectorAll(".del").forEach(function(b){
     b.addEventListener("click", function(){
-      delete weights[b.dataset.d]; save("wt.weights", weights); renderWeight();
+      undoBuf = { type: "weight", date: b.dataset.d, value: weights[b.dataset.d] };
+      delete weights[b.dataset.d];
+      save("wt.weights", weights);
+      renderWeight(); renderCoach();
+      showUndo("Gewichtseintrag gelöscht");
     });
   });
 
@@ -685,6 +718,7 @@ document.getElementById("cfgSave").addEventListener("click", function(){
 function todayMeals(){ return meals[todayStr()] || []; }
 
 var activity = load("wt.activity", {});
+var mealEditIdx = -1;
 function renderMeals(){
   var list = todayMeals();
   var kcal = 0, prot = 0;
@@ -704,35 +738,57 @@ function renderMeals(){
   document.getElementById("protTargetLbl").textContent = cfg.prot;
   var el = document.getElementById("mealList");
   el.innerHTML = list.length ? list.map(function(m, i){
+    if(i === mealEditIdx){
+      return '<div class="listItem" style="flex-wrap:wrap;gap:6px">' +
+        '<input type="text" id="eName" value="' + m.name.replace(/"/g, "&quot;") + '" style="flex:1 1 100%">' +
+        '<input type="number" id="eKcal" value="' + m.kcal + '" placeholder="kcal" inputmode="numeric" style="flex:1">' +
+        '<input type="number" id="eP" value="' + Math.round(m.p || 0) + '" placeholder="Protein g" inputmode="numeric" style="flex:1">' +
+        '<button class="primary" id="eSave" style="padding:10px 14px">OK</button>' +
+        '<button class="ghost" id="eCancel" style="padding:10px 14px">Abbruch</button></div>';
+    }
     return '<div class="listItem"><span>' + (m.t ? m.t + " · " : "") + m.name.replace(/</g,"&lt;") + '</span><span><b>' + m.kcal + ' kcal</b>' + (m.p ? ' <span class="muted">' + Math.round(m.p) + 'g P</span>' : '') + ' <button class="del" style="color:var(--accent)" data-e="' + i + '">✎</button><button class="del" data-i="' + i + '">✕</button></span></div>';
   }).join("") : '<div class="muted">Noch nichts erfasst heute.</div>';
   el.querySelectorAll("[data-i]").forEach(function(b){
     b.addEventListener("click", function(){
       var arr = meals[todayStr()] || [];
-      arr.splice(parseInt(b.dataset.i), 1);
+      var idx = parseInt(b.dataset.i);
+      undoBuf = { type: "meal", date: todayStr(), index: idx, item: arr[idx] };
+      arr.splice(idx, 1);
       meals[todayStr()] = arr;
       save("wt.meals", meals);
+      mealEditIdx = -1;
       renderMeals();
+      showUndo("Mahlzeit gelöscht");
     });
   });
   el.querySelectorAll("[data-e]").forEach(function(b){
     b.addEventListener("click", function(){
-      var arr = meals[todayStr()] || [];
-      var m = arr[parseInt(b.dataset.e)];
-      if(!m) return;
-      var name = prompt("Gericht:", m.name);
-      if(name === null) return;
-      var kcal = prompt("Kalorien (kcal):", m.kcal);
-      if(kcal === null) return;
-      var p = prompt("Protein (g):", m.p || 0);
-      if(p === null) return;
-      m.name = name.trim() || m.name;
-      m.kcal = parseInt(kcal) || m.kcal;
-      m.p = parseFloat(p) || 0;
-      save("wt.meals", meals);
+      mealEditIdx = parseInt(b.dataset.e);
       renderMeals();
     });
   });
+  var eSave = document.getElementById("eSave");
+  if(eSave){
+    eSave.addEventListener("click", function(){
+      var arr = meals[todayStr()] || [];
+      var m = arr[mealEditIdx];
+      if(m){
+        var name = document.getElementById("eName").value.trim();
+        var kcal = parseInt(document.getElementById("eKcal").value);
+        var p = parseFloat(document.getElementById("eP").value);
+        if(name) m.name = name;
+        if(!isNaN(kcal)) m.kcal = kcal;
+        m.p = isNaN(p) ? 0 : p;
+        save("wt.meals", meals);
+      }
+      mealEditIdx = -1;
+      renderMeals();
+    });
+    document.getElementById("eCancel").addEventListener("click", function(){
+      mealEditIdx = -1;
+      renderMeals();
+    });
+  }
 }
 
 function addMeal(name, kcal, p){
