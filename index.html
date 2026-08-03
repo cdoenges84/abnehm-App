@@ -130,6 +130,8 @@ details[open] summary::after{content:"▴"}
       <div class="progressOuter"><div class="progressInner" id="kcalBar" style="width:0%"></div></div>
       <div class="muted">Protein heute: <b id="protToday">0</b> / <span id="protTargetLbl">140</span> g</div>
       <div class="muted" id="bonusInfo"></div>
+      <button class="ghost" style="width:100%;margin-top:10px" id="dayCopy">📤 Tagesstatus für Coach kopieren</button>
+      <div class="muted" id="dayCopyMsg" style="margin-top:6px;text-align:center"></div>
     </div>
 
     <div class="card">
@@ -870,6 +872,32 @@ document.getElementById("actSave").addEventListener("click", function(){
   save("wt.activity", activity);
   document.getElementById("actMsg").textContent = "✓ Gespeichert – Budget angepasst";
   renderMeals();
+});
+
+document.getElementById("dayCopy").addEventListener("click", function(){
+  var list = todayMeals();
+  var kcal = 0, prot = 0;
+  list.forEach(function(m){ kcal += m.kcal || 0; prot += m.p || 0; });
+  var act = activity[todayStr()] || 0;
+  var bonus = Math.round(act * 0.5);
+  var left = cfg.kcal + bonus - kcal;
+  var sweet = sweets[todayStr()] || 0;
+  var dates = sortedDates(weights);
+  var avg = dates.length ? avgLastNDays(dates[dates.length - 1], 7) : null;
+  var todayIdx = (new Date().getDay() + 6) % 7;
+  var planned = plan[todayIdx] || {};
+  var lines = ["Mein Tagesstatus aus der App (" + fmt(todayStr()) + "):"];
+  lines.push("Bisher gegessen: " + (list.length ? list.map(function(m){ return (m.t ? m.t + " " : "") + m.name + " (" + m.kcal + " kcal, " + Math.round(m.p || 0) + " g Protein)"; }).join("; ") : "noch nichts"));
+  lines.push("Summe: " + kcal + " kcal, " + Math.round(prot) + " g Protein.");
+  lines.push("Budget: " + cfg.kcal + " kcal" + (bonus ? " + " + bonus + " Bewegungsbonus (Aktivität " + act + " kcal)" : "") + " → noch " + left + " kcal übrig. Protein-Ziel " + cfg.prot + " g → es fehlen noch " + Math.max(0, cfg.prot - Math.round(prot)) + " g.");
+  lines.push("Süß-Budget heute: " + (sweet === 0 ? "noch frei" : sweet === 1 ? "genutzt" : "überzogen (" + sweet + ")") + ".");
+  if(avg != null) lines.push("Gewicht (7-Tage-Schnitt): " + avg.toFixed(1) + " kg.");
+  if(planned.a) lines.push("Laut Wochenplan heute Abend geplant: " + planned.a + ".");
+  lines.push("");
+  lines.push("Meine Frage: ");
+  copyText(lines.join("\n")).then(function(){
+    document.getElementById("dayCopyMsg").textContent = "✓ Kopiert – im Claude-Chat einfügen und Frage anhängen";
+  });
 });
 
 /* ---- Wochenplan ---- */
