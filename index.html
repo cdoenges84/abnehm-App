@@ -144,8 +144,10 @@ details[open] summary::after{content:"▴"}
 
     <div class="card">
       <h2>📸 Mahlzeit per Foto erfassen</h2>
-      <label class="plabel" for="mealPhoto">Foto aufnehmen / auswählen</label>
-      <input type="file" id="mealPhoto" accept="image/*" style="display:none">
+      <input type="text" id="mealHint" placeholder="Optionaler Hinweis: z.B. halbe Portion, 300 g, das ist Skyr…" style="margin-bottom:8px">
+      <label class="plabel" for="mealPhoto">Foto(s) aufnehmen / auswählen</label>
+      <input type="file" id="mealPhoto" accept="image/*" multiple style="display:none">
+      <div class="muted" style="margin-top:6px;text-align:center">Mehrere Fotos derselben Mahlzeit möglich (max. 4)</div>
       <div class="muted" id="mealStatus" style="margin-top:8px;text-align:center"></div>
       <div id="mealResult" style="margin-top:8px;font-size:.9rem;line-height:1.5"></div>
     </div>
@@ -697,13 +699,31 @@ function renderMeals(){
   document.getElementById("protTargetLbl").textContent = cfg.prot;
   var el = document.getElementById("mealList");
   el.innerHTML = list.length ? list.map(function(m, i){
-    return '<div class="listItem"><span>' + (m.t ? m.t + " · " : "") + m.name.replace(/</g,"&lt;") + '</span><span><b>' + m.kcal + ' kcal</b>' + (m.p ? ' <span class="muted">' + Math.round(m.p) + 'g P</span>' : '') + ' <button class="del" data-i="' + i + '">✕</button></span></div>';
+    return '<div class="listItem"><span>' + (m.t ? m.t + " · " : "") + m.name.replace(/</g,"&lt;") + '</span><span><b>' + m.kcal + ' kcal</b>' + (m.p ? ' <span class="muted">' + Math.round(m.p) + 'g P</span>' : '') + ' <button class="del" style="color:var(--accent)" data-e="' + i + '">✎</button><button class="del" data-i="' + i + '">✕</button></span></div>';
   }).join("") : '<div class="muted">Noch nichts erfasst heute.</div>';
-  el.querySelectorAll(".del").forEach(function(b){
+  el.querySelectorAll("[data-i]").forEach(function(b){
     b.addEventListener("click", function(){
       var arr = meals[todayStr()] || [];
       arr.splice(parseInt(b.dataset.i), 1);
       meals[todayStr()] = arr;
+      save("wt.meals", meals);
+      renderMeals();
+    });
+  });
+  el.querySelectorAll("[data-e]").forEach(function(b){
+    b.addEventListener("click", function(){
+      var arr = meals[todayStr()] || [];
+      var m = arr[parseInt(b.dataset.e)];
+      if(!m) return;
+      var name = prompt("Gericht:", m.name);
+      if(name === null) return;
+      var kcal = prompt("Kalorien (kcal):", m.kcal);
+      if(kcal === null) return;
+      var p = prompt("Protein (g):", m.p || 0);
+      if(p === null) return;
+      m.name = name.trim() || m.name;
+      m.kcal = parseInt(kcal) || m.kcal;
+      m.p = parseFloat(p) || 0;
       save("wt.meals", meals);
       renderMeals();
     });
@@ -751,18 +771,26 @@ function resizeImage(file){
 }
 
 document.getElementById("mealPhoto").addEventListener("change", function(){
-  var file = this.files && this.files[0];
+  var files = Array.prototype.slice.call(this.files || []).slice(0, 4);
   this.value = "";
-  if(!file) return;
+  if(!files.length) return;
   if(!cfg.key){
     document.getElementById("mealStatus").textContent = "Bitte zuerst unten in den Einstellungen den API-Schlüssel eintragen.";
     return;
   }
+  var hint = document.getElementById("mealHint").value.trim();
   var st = document.getElementById("mealStatus");
   var res = document.getElementById("mealResult");
   res.innerHTML = "";
-  st.textContent = "Analysiere Foto …";
-  resizeImage(file).then(function(b64){
+  st.textContent = files.length > 1 ? "Analysiere " + files.length + " Fotos …" : "Analysiere Foto …";
+  Promise.all(files.map(resizeImage)).then(function(b64s){
+    var content = b64s.map(function(b64){
+      return { type: "image", source: { type: "base64", media_type: "image/jpeg", data: b64 } };
+    });
+    var txt = "Analysiere diese Mahlzeit.";
+    if(b64s.length > 1) txt += " Alle Fotos zeigen DIESELBE Mahlzeit (verschiedene Winkel oder Bestandteile) – schätze die Gesamtmenge nur einmal.";
+    if(hint) txt += " Wichtiger Hinweis vom Nutzer, hat Vorrang vor deiner Bildeinschätzung: " + hint;
+    content.push({ type: "text", text: txt });
     return fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -774,11 +802,8 @@ document.getElementById("mealPhoto").addEventListener("change", function(){
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 400,
-        system: "Du bist ein Ernaehrungs-Schaetzer fuer eine Abnehm-App. Der Nutzer (m, 183 cm, Ziel 85 kg) fotografiert seine Mahlzeit. Schaetze realistisch Kalorien und Protein der GESAMTEN sichtbaren Portion. Antworte AUSSCHLIESSLICH mit einem JSON-Objekt: {\"gericht\":\"kurzer Name\",\"kcal\":Zahl,\"protein_g\":Zahl,\"einschaetzung\":\"1 Satz: passt die Mahlzeit zu seinen Regeln (Protein-Anker, Beilagen halbieren)?\",\"tipp\":\"1 kurzer konkreter Verbesserungstipp oder Lob\"}",
-        messages: [{ role: "user", content: [
-          { type: "image", source: { type: "base64", media_type: "image/jpeg", data: b64 } },
-          { type: "text", text: "Analysiere diese Mahlzeit." }
-        ]}]
+        system: "Du bist ein Ernaehrungs-Schaetzer fuer eine Abnehm-App. Der Nutzer (m, 183 cm, Ziel 85 kg) fotografiert seine Mahlzeit. Schaetze realistisch Kalorien und Protein der GESAMTEN sichtbaren Portion. Wenn der Nutzer einen Hinweis mitgibt (Menge, Zutat, Korrektur), richte dich danach. Antworte AUSSCHLIESSLICH mit einem JSON-Objekt: {\"gericht\":\"kurzer Name\",\"kcal\":Zahl,\"protein_g\":Zahl,\"einschaetzung\":\"1 Satz: passt die Mahlzeit zu seinen Regeln (Protein-Anker, Beilagen halbieren)?\",\"tipp\":\"1 kurzer konkreter Verbesserungstipp oder Lob\"}",
+        messages: [{ role: "user", content: content }]
       })
     });
   }).then(function(r){
@@ -792,6 +817,7 @@ document.getElementById("mealPhoto").addEventListener("change", function(){
     if(!m) throw new Error("Antwort nicht lesbar – bitte nochmal versuchen.");
     var j = JSON.parse(m[0]);
     addMeal(j.gericht || "Mahlzeit", j.kcal || 0, j.protein_g || 0);
+    document.getElementById("mealHint").value = "";
     var left = cfg.kcal - todayMeals().reduce(function(s, x){ return s + x.kcal; }, 0);
     st.textContent = "";
     res.innerHTML = "<b>" + (j.gericht || "Mahlzeit") + "</b>: ca. " + j.kcal + " kcal, " + j.protein_g + " g Protein<br>" +
