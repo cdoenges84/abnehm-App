@@ -234,7 +234,7 @@ details[open] summary::after{content:"▴"}
     </div>
     <div class="card">
       <h2>🛒 Vorrats-Check für Alexa</h2>
-      <div class="muted">Hake ab, was fehlt – dann kopieren und an Alexa diktieren oder in die Alexa-App einfügen.</div>
+      <div class="muted">Hake ab, was fehlt – dann kopieren (ein Artikel pro Zeile) und in die Alexa-App einfügen, oder einfach der Reihe nach an Alexa diktieren.</div>
       <div id="shopList" style="margin-top:8px"></div>
       <button class="primary" style="width:100%;margin-top:10px" id="shopCopy">Liste kopieren</button>
       <button class="ghost" style="width:100%;margin-top:8px" id="shopReset">Zurücksetzen</button>
@@ -771,8 +771,8 @@ function renderShop(){
 document.getElementById("shopCopy").addEventListener("click", function(){
   var sel = SHOP_ITEMS.filter(function(it){ return shop[it]; });
   if(!sel.length){ document.getElementById("shopMsg").textContent = "Nichts angehakt."; return; }
-  copyText(sel.join(", ")).then(function(){
-    document.getElementById("shopMsg").textContent = "✓ Kopiert: " + sel.length + " Artikel";
+  copyText(sel.join("\n")).then(function(){
+    document.getElementById("shopMsg").textContent = "✓ Kopiert: " + sel.length + " Artikel (je eine Zeile)";
   });
 });
 document.getElementById("shopReset").addEventListener("click", function(){
