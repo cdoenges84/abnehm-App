@@ -26,7 +26,7 @@ h2{font-size:.95rem;font-weight:700;margin-bottom:8px}
 .big{font-size:2.2rem;font-weight:800;line-height:1.1}
 .row{display:flex;gap:8px;align-items:center}
 .grow{flex:1}
-input[type=number],input[type=date],textarea{width:100%;font-size:1rem;padding:12px;border:1px solid var(--line);border-radius:10px;background:#fbfbfc;color:var(--ink)}
+input[type=number],input[type=date],input[type=text],textarea{width:100%;font-size:1rem;padding:12px;border:1px solid var(--line);border-radius:10px;background:#fbfbfc;color:var(--ink)}
 textarea{min-height:90px;resize:vertical;font-family:inherit}
 button.primary{background:var(--accent);color:#fff;border:0;border-radius:10px;padding:12px 18px;font-size:1rem;font-weight:600;cursor:pointer}
 button.ghost{background:transparent;border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:.85rem;color:var(--muted);cursor:pointer}
@@ -129,6 +129,17 @@ details[open] summary::after{content:"▴"}
       </div>
       <div class="progressOuter"><div class="progressInner" id="kcalBar" style="width:0%"></div></div>
       <div class="muted">Protein heute: <b id="protToday">0</b> / <span id="protTargetLbl">140</span> g</div>
+      <div class="muted" id="bonusInfo"></div>
+    </div>
+
+    <div class="card">
+      <h2>⌚ Aktivität heute (Apple Watch)</h2>
+      <div class="muted">Aktivitätskalorien aus der Fitness-App eintragen. 50 % davon werden dem Budget gutgeschrieben – Uhren messen großzügig, wer alles zurückisst, nimmt nicht ab.</div>
+      <div class="row" style="margin-top:8px">
+        <input type="number" id="actKcal" placeholder="z.B. 550" inputmode="numeric">
+        <button class="primary" id="actSave" style="white-space:nowrap">OK</button>
+      </div>
+      <div class="muted" id="actMsg" style="margin-top:6px"></div>
     </div>
 
     <div class="card">
@@ -164,6 +175,36 @@ details[open] summary::after{content:"▴"}
       <button class="primary" style="width:100%" id="cfgSave">Einstellungen speichern</button>
       <div class="muted" style="margin-top:8px;line-height:1.5">Der Schlüssel wird nur auf diesem Gerät gespeichert. Einrichtung: console.anthropic.com → Konto anlegen → Guthaben aufladen (ab 5 $) → „API Keys" → Schlüssel erstellen und hier einfügen. Kosten: unter 1 Cent pro Foto.</div>
     </div>
+  </div>
+
+  <!-- PLAN -->
+  <div class="tab" id="tab-plan">
+    <div class="card">
+      <h2>📅 Essensplan für die Woche</h2>
+      <div class="muted">Antippen und eintragen (Vorschläge erscheinen beim Tippen) – oder unten automatisch füllen lassen.</div>
+      <div id="planGrid" style="margin-top:10px"></div>
+      <button class="primary" style="width:100%;margin-top:10px" id="planFill">Woche automatisch füllen</button>
+      <button class="ghost" style="width:100%;margin-top:8px" id="planClear">Plan leeren</button>
+    </div>
+    <datalist id="mealOpts">
+      <option value="Kantine: Salat mit Hühnchen"></option>
+      <option value="Kantine: Linsen-/Gulascheintopf"></option>
+      <option value="Kantine: Schnitzel (Pommes halb!)"></option>
+      <option value="Bäcker: Laugenstange + Skyr-Drink"></option>
+      <option value="Bäcker: Laugenstange + Proteinjoghurt"></option>
+      <option value="Omelett mit TK-Gemüse und Feta"></option>
+      <option value="TK-Gemüsepfanne mit Hähnchen + Reis"></option>
+      <option value="TK-Gemüsepfanne mit Garnelen + Reis"></option>
+      <option value="Wraps mit Hähnchenaufschnitt + Rohkost"></option>
+      <option value="Kichererbsen-Salat mit Feta"></option>
+      <option value="Linsen mit Tomaten und Feta"></option>
+      <option value="Ofen-Feta mit Kirschtomaten"></option>
+      <option value="Vollkornbrot mit Hüttenkäse + Gurke"></option>
+      <option value="Skyr-Bowl mit Beeren und Nüssen"></option>
+      <option value="Frühstück: Rührei mit Käse"></option>
+      <option value="Reste vom Vortag"></option>
+      <option value="Auswärts / Anlass (80/20)"></option>
+    </datalist>
   </div>
 
   <!-- BUDGET -->
@@ -328,6 +369,7 @@ details[open] summary::after{content:"▴"}
 <nav class="tabbar">
   <button data-tab="gewicht" class="active"><span class="ico">⚖️</span>Gewicht</button>
   <button data-tab="essen"><span class="ico">🍽️</span>Essen</button>
+  <button data-tab="plan"><span class="ico">📅</span>Plan</button>
   <button data-tab="budget"><span class="ico">🍫</span>Budget</button>
   <button data-tab="notizen"><span class="ico">📝</span>Notizen</button>
   <button data-tab="ratgeber"><span class="ico">🛒</span>Ratgeber</button>
@@ -633,16 +675,22 @@ document.getElementById("cfgSave").addEventListener("click", function(){
 
 function todayMeals(){ return meals[todayStr()] || []; }
 
+var activity = load("wt.activity", {});
 function renderMeals(){
   var list = todayMeals();
   var kcal = 0, prot = 0;
   list.forEach(function(m){ kcal += m.kcal || 0; prot += m.p || 0; });
   document.getElementById("kcalToday").textContent = kcal;
-  var left = cfg.kcal - kcal;
+  var act = activity[todayStr()] || 0;
+  var bonus = Math.round(act * 0.5);
+  var budget = cfg.kcal + bonus;
+  var left = budget - kcal;
   var leftEl = document.getElementById("kcalLeft");
   leftEl.textContent = left + " kcal";
   leftEl.style.color = left < 0 ? "var(--red)" : "var(--green)";
-  document.getElementById("kcalBar").style.width = Math.max(0, Math.min(100, kcal / cfg.kcal * 100)) + "%";
+  document.getElementById("kcalBar").style.width = Math.max(0, Math.min(100, kcal / budget * 100)) + "%";
+  document.getElementById("bonusInfo").textContent = act > 0 ? "inkl. +" + bonus + " kcal Bewegungsbonus (50 % von " + act + " kcal Aktivität)" : "";
+  if(document.activeElement !== document.getElementById("actKcal")) document.getElementById("actKcal").value = act || "";
   document.getElementById("protToday").textContent = Math.round(prot);
   document.getElementById("protTargetLbl").textContent = cfg.prot;
   var el = document.getElementById("mealList");
@@ -753,6 +801,61 @@ document.getElementById("mealPhoto").addEventListener("change", function(){
   });
 });
 
+document.getElementById("actSave").addEventListener("click", function(){
+  var v = parseInt(document.getElementById("actKcal").value);
+  if(isNaN(v) || v < 0 || v > 5000){ document.getElementById("actMsg").textContent = "Bitte gültigen Wert eingeben."; return; }
+  activity[todayStr()] = v;
+  save("wt.activity", activity);
+  document.getElementById("actMsg").textContent = "✓ Gespeichert – Budget angepasst";
+  renderMeals();
+});
+
+/* ---- Wochenplan ---- */
+var plan = load("wt.plan", {});
+var DAYS = ["Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag","Sonntag"];
+var PLAN_SUG = [
+  { m: "Kantine: Salat mit Hühnchen", a: "TK-Gemüsepfanne mit Hähnchen + Reis" },
+  { m: "Bäcker: Laugenstange + Skyr-Drink", a: "Omelett mit TK-Gemüse und Feta" },
+  { m: "Kantine: Linsen-/Gulascheintopf", a: "Wraps mit Hähnchenaufschnitt + Rohkost" },
+  { m: "Bäcker: Laugenstange + Proteinjoghurt", a: "Kichererbsen-Salat mit Feta" },
+  { m: "Kantine: Schnitzel (Pommes halb!)", a: "Ofen-Feta mit Kirschtomaten" },
+  { m: "Frühstück: Rührei mit Käse", a: "Linsen mit Tomaten und Feta" },
+  { m: "Skyr-Bowl mit Beeren und Nüssen", a: "Reste vom Vortag" }
+];
+function renderPlan(){
+  var todayIdx = (new Date().getDay() + 6) % 7;
+  document.getElementById("planGrid").innerHTML = DAYS.map(function(d, i){
+    var p = plan[i] || {};
+    var l1 = i >= 5 ? "Frühstück" : "Mittag";
+    var hl = i === todayIdx ? ' style="color:var(--accent)"' : "";
+    return '<div style="margin-bottom:12px"><b' + hl + '>' + d + (i === todayIdx ? " · heute" : "") + '</b>' +
+      '<input type="text" list="mealOpts" data-d="' + i + '" data-s="m" placeholder="' + l1 + '" value="' + (p.m || "").replace(/"/g, "&quot;") + '" style="margin-top:4px">' +
+      '<input type="text" list="mealOpts" data-d="' + i + '" data-s="a" placeholder="Abend" value="' + (p.a || "").replace(/"/g, "&quot;") + '" style="margin-top:4px"></div>';
+  }).join("");
+  document.querySelectorAll("#planGrid input").forEach(function(inp){
+    inp.addEventListener("change", function(){
+      var d = inp.dataset.d, s = inp.dataset.s;
+      if(!plan[d]) plan[d] = {};
+      plan[d][s] = inp.value;
+      save("wt.plan", plan);
+    });
+  });
+}
+document.getElementById("planFill").addEventListener("click", function(){
+  var hasEntries = Object.keys(plan).some(function(k){ return (plan[k].m || plan[k].a); });
+  if(hasEntries && !confirm("Vorhandene Einträge überschreiben?")) return;
+  plan = {};
+  PLAN_SUG.forEach(function(s, i){ plan[i] = { m: s.m, a: s.a }; });
+  save("wt.plan", plan);
+  renderPlan();
+});
+document.getElementById("planClear").addEventListener("click", function(){
+  if(!confirm("Wochenplan wirklich leeren?")) return;
+  plan = {};
+  save("wt.plan", plan);
+  renderPlan();
+});
+
 /* ---- Vorrats-Check ---- */
 var SHOP_ITEMS = ["Skyr / Magerquark", "Hüttenkäse", "Feta", "Mozzarella", "Eier", "Cherrytomaten", "Gurken / Gewürzgurken", "Buttermilch", "Hähnchenaufschnitt", "Wraps", "Vollkornbrot", "TK-Gemüse", "TK-Hähnchen / Garnelen", "TK-Beeren", "Linsen (Dose)", "Kichererbsen (Dose)", "Passierte Tomaten", "Reis", "Nüsse", "Dunkle Schokolade 70%"];
 var shop = load("wt.shop", {});
@@ -782,7 +885,7 @@ document.getElementById("shopReset").addEventListener("click", function(){
 
 /* ---- Backup ---- */
 document.getElementById("bkExport").addEventListener("click", function(){
-  var data = JSON.stringify({ v:2, exported: todayStr(), weights: weights, sweets: sweets, notes: notes, meals: meals, budget: { kcal: cfg.kcal, prot: cfg.prot } });
+  var data = JSON.stringify({ v:3, exported: todayStr(), weights: weights, sweets: sweets, notes: notes, meals: meals, activity: activity, plan: plan, budget: { kcal: cfg.kcal, prot: cfg.prot } });
   copyText(data).then(function(){
     document.getElementById("bkMsg").textContent = "✓ Backup kopiert – sicher ablegen (z.B. Apple Notizen)";
   });
@@ -798,11 +901,13 @@ document.getElementById("bkImport").addEventListener("click", function(){
     Object.keys(data.sweets || {}).forEach(function(k){ sweets[k] = data.sweets[k]; });
     Object.keys(data.notes || {}).forEach(function(k){ notes[k] = data.notes[k]; });
     Object.keys(data.meals || {}).forEach(function(k){ meals[k] = data.meals[k]; });
+    Object.keys(data.activity || {}).forEach(function(k){ activity[k] = data.activity[k]; });
+    Object.keys(data.plan || {}).forEach(function(k){ plan[k] = data.plan[k]; });
     if(data.budget){ cfg.kcal = data.budget.kcal || cfg.kcal; cfg.prot = data.budget.prot || cfg.prot; save("wt.cfg", cfg); }
-    save("wt.weights", weights); save("wt.sweets", sweets); save("wt.notes", notes); save("wt.meals", meals);
+    save("wt.weights", weights); save("wt.sweets", sweets); save("wt.notes", notes); save("wt.meals", meals); save("wt.activity", activity); save("wt.plan", plan);
     document.getElementById("bkText").value = "";
     document.getElementById("bkMsg").textContent = "✓ Wiederhergestellt";
-    renderWeight(); renderSweets(); renderNotes(); renderCoach(); renderMeals();
+    renderWeight(); renderSweets(); renderNotes(); renderCoach(); renderMeals(); renderPlan();
   } catch(e){
     document.getElementById("bkMsg").textContent = "Ungültiges Backup – bitte kompletten Text einfügen.";
   }
@@ -814,6 +919,7 @@ renderNotes();
 renderCoach();
 renderMeals();
 renderShop();
+renderPlan();
 })();
 </script>
 </body>
