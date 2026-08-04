@@ -172,6 +172,9 @@ details[open] summary::after{content:"▴"}
         <input type="number" id="mKcal" placeholder="kcal" inputmode="numeric" style="flex:1">
         <input type="number" id="mProt" placeholder="Protein g" inputmode="numeric" style="flex:1">
       </div>
+      <div class="row" style="margin-bottom:8px">
+        <div class="grow"><div class="muted">Für welchen Tag?</div><input type="date" id="mDate"></div>
+      </div>
       <button class="ghost" style="width:100%" id="mAdd">Hinzufügen</button>
       <div class="muted" id="mMsg" style="margin-top:6px;text-align:center"></div>
     </div>
@@ -744,6 +747,7 @@ function renderMeals(){
         '<input type="text" id="eName" value="' + m.name.replace(/"/g, "&quot;") + '" style="flex:1 1 100%">' +
         '<input type="number" id="eKcal" value="' + m.kcal + '" placeholder="kcal" inputmode="numeric" style="flex:1">' +
         '<input type="number" id="eP" value="' + Math.round(m.p || 0) + '" placeholder="Protein g" inputmode="numeric" style="flex:1">' +
+        '<input type="date" id="eDate" value="' + todayStr() + '" style="flex:1 1 100%">' +
         '<button class="primary" id="eSave" style="padding:10px 14px">OK</button>' +
         '<button class="ghost" id="eCancel" style="padding:10px 14px">Abbruch</button></div>';
     }
@@ -792,9 +796,17 @@ function renderMeals(){
         var name = document.getElementById("eName").value.trim();
         var kcal = parseInt(document.getElementById("eKcal").value);
         var p = parseFloat(document.getElementById("eP").value);
+        var nd = document.getElementById("eDate").value || todayStr();
         if(name) m.name = name;
         if(!isNaN(kcal)) m.kcal = kcal;
         m.p = isNaN(p) ? 0 : p;
+        if(nd !== todayStr()){
+          arr.splice(mealEditIdx, 1);
+          meals[todayStr()] = arr;
+          m.t = "";
+          if(!meals[nd]) meals[nd] = [];
+          meals[nd].push(m);
+        }
         save("wt.meals", meals);
       }
       mealEditIdx = -1;
@@ -807,11 +819,12 @@ function renderMeals(){
   }
 }
 
-function addMeal(name, kcal, p){
-  var t = todayStr();
+function addMeal(name, kcal, p, dateOpt){
+  var t = dateOpt || todayStr();
   if(!meals[t]) meals[t] = [];
   var d = new Date();
-  meals[t].push({ t: String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0"), name: name, kcal: Math.round(kcal), p: p || 0 });
+  var time = (t === todayStr()) ? String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0") : "";
+  meals[t].push({ t: time, name: name, kcal: Math.round(kcal), p: p || 0 });
   save("wt.meals", meals);
   renderMeals();
 }
@@ -853,16 +866,19 @@ document.getElementById("mSuggest").addEventListener("click", function(){
   });
 });
 
+document.getElementById("mDate").value = todayStr();
 document.getElementById("mAdd").addEventListener("click", function(){
   var name = document.getElementById("mName").value.trim();
   var kcal = parseInt(document.getElementById("mKcal").value);
   var p = parseFloat(document.getElementById("mProt").value);
+  var date = document.getElementById("mDate").value || todayStr();
   if(!name || isNaN(kcal)){ document.getElementById("mMsg").textContent = "Bitte Name und kcal angeben (oder Vorschlag holen)."; return; }
-  addMeal(name, kcal, isNaN(p) ? 0 : p);
+  addMeal(name, kcal, isNaN(p) ? 0 : p, date);
   document.getElementById("mName").value = "";
   document.getElementById("mKcal").value = "";
   document.getElementById("mProt").value = "";
-  document.getElementById("mMsg").textContent = "✓ Eingetragen";
+  document.getElementById("mDate").value = todayStr();
+  document.getElementById("mMsg").textContent = date === todayStr() ? "✓ Eingetragen" : "✓ Eingetragen für den " + fmt(date) + " – siehe Vergangene Tage";
 });
 
 function resizeImage(file){
