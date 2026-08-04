@@ -177,15 +177,8 @@ details[open] summary::after{content:"▴"}
     </div>
 
     <div class="card">
-      <h2>⚙️ Einstellungen</h2>
-      <div class="row" style="margin-bottom:8px">
-        <div class="grow"><div class="muted">Tagesbudget (kcal)</div><input type="number" id="cfgKcal" inputmode="numeric"></div>
-        <div class="grow"><div class="muted">Protein-Ziel (g)</div><input type="number" id="cfgProt" inputmode="numeric"></div>
-      </div>
-      <div class="muted">Anthropic-API-Schlüssel (für die Foto-Analyse)</div>
-      <input type="password" id="cfgKey" placeholder="sk-ant-…" style="margin-bottom:8px">
-      <button class="primary" style="width:100%" id="cfgSave">Einstellungen speichern</button>
-      <div class="muted" style="margin-top:8px;line-height:1.5">Der Schlüssel wird nur auf diesem Gerät gespeichert. Einrichtung: console.anthropic.com → Konto anlegen → Guthaben aufladen (ab 5 $) → „API Keys" → Schlüssel erstellen und hier einfügen. Kosten: unter 1 Cent pro Foto.</div>
+      <h2>📆 Vergangene Tage</h2>
+      <div class="list" id="mealHistory"></div>
     </div>
   </div>
 
@@ -277,13 +270,18 @@ details[open] summary::after{content:"▴"}
     </div>
   </div>
 
-  <!-- RATGEBER -->
+  <!-- EINSTELLUNGEN & RATGEBER -->
   <div class="tab" id="tab-ratgeber">
     <div class="card">
-      <h2>📸 Mahlzeiten-Check per Foto</h2>
-      <div class="muted" style="line-height:1.6">Unsicher, ob eine Mahlzeit passt? Foto machen und in der <b>Claude-App</b> schicken mit:<br>
-      <i>„Analysiere diese Mahlzeit für mein Abnehmziel: genug Protein? Portionsgröße ok? Was würdest du ändern? Meine Regeln: 2 Mahlzeiten am Tag, Protein als Anker, Beilagen halbieren."</i><br>
-      Du bekommst sofort eine Einschätzung und einen Verbesserungsvorschlag.</div>
+      <h2>⚙️ Einstellungen</h2>
+      <div class="row" style="margin-bottom:8px">
+        <div class="grow"><div class="muted">Tagesbudget (kcal)</div><input type="number" id="cfgKcal" inputmode="numeric"></div>
+        <div class="grow"><div class="muted">Protein-Ziel (g)</div><input type="number" id="cfgProt" inputmode="numeric"></div>
+      </div>
+      <div class="muted">Anthropic-API-Schlüssel (für Foto-Analyse und Kalorien-Vorschläge)</div>
+      <input type="password" id="cfgKey" placeholder="sk-ant-…" style="margin-bottom:8px">
+      <button class="primary" style="width:100%" id="cfgSave">Einstellungen speichern</button>
+      <div class="muted" style="margin-top:8px;line-height:1.5">Der Schlüssel wird nur auf diesem Gerät gespeichert. Einrichtung: console.anthropic.com → Guthaben aufladen → „API Keys" → Schlüssel erstellen und hier einfügen.</div>
     </div>
     <div class="card">
       <h2>🛒 Vorrats-Check für Alexa</h2>
@@ -388,7 +386,7 @@ details[open] summary::after{content:"▴"}
   <button data-tab="plan"><span class="ico">📅</span>Plan</button>
   <button data-tab="budget"><span class="ico">🍫</span>Budget</button>
   <button data-tab="notizen"><span class="ico">📝</span>Notizen</button>
-  <button data-tab="ratgeber"><span class="ico">🛒</span>Ratgeber</button>
+  <button data-tab="ratgeber"><span class="ico">⚙️</span>Ratgeber</button>
 </nav>
 
 <script>
@@ -770,6 +768,21 @@ function renderMeals(){
       renderMeals();
     });
   });
+  var histEl = document.getElementById("mealHistory");
+  var histLines = [];
+  for(var hi = 1; hi <= 30; hi++){
+    var hd = shiftDate(todayStr(), -hi);
+    var hml = meals[hd] || [];
+    if(!hml.length) continue;
+    var hk = 0, hp = 0;
+    hml.forEach(function(m){ hk += m.kcal || 0; hp += m.p || 0; });
+    var over = hk > cfg.kcal + Math.round((activity[hd] || 0) * 0.5);
+    histLines.push('<div class="listItem" style="flex-direction:column;align-items:flex-start;gap:2px">' +
+      '<div style="display:flex;justify-content:space-between;width:100%"><span>' + fmt(hd) + '</span>' +
+      '<b style="color:' + (over ? "var(--red)" : "var(--green)") + '">' + hk + ' kcal · ' + Math.round(hp) + 'g P</b></div>' +
+      '<div class="muted" style="font-size:.8rem">' + hml.map(function(m){ return m.name.replace(/</g, "&lt;"); }).join(", ") + '</div></div>');
+  }
+  histEl.innerHTML = histLines.length ? histLines.join("") : '<div class="muted">Noch keine früheren Tage erfasst. Grün = Budget gehalten, Rot = überzogen.</div>';
   var eSave = document.getElementById("eSave");
   if(eSave){
     eSave.addEventListener("click", function(){
