@@ -75,6 +75,7 @@ details[open] summary::after{content:"▴"}
 .shopItem input{width:20px;height:20px}
 .toast{position:fixed;bottom:calc(74px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:12px;display:flex;gap:14px;align-items:center;z-index:30;font-size:.88rem;box-shadow:0 4px 16px rgba(0,0,0,.25);white-space:nowrap}
 .toast button{background:none;border:0;color:#7cb3ff;font-weight:700;font-size:.9rem;cursor:pointer}
+.thumb{width:54px;height:54px;object-fit:cover;border-radius:8px;border:1px solid var(--line);margin:0 3px;vertical-align:middle}
 </style>
 </head>
 <body>
@@ -148,9 +149,12 @@ details[open] summary::after{content:"▴"}
 
     <div class="card">
       <h2>📸 Mahlzeit per Foto erfassen</h2>
-      <label class="plabel" for="mealPhoto">Foto(s) aufnehmen / auswählen</label>
+      <label class="plabel" for="mealPhoto">📷 Foto hinzufügen</label>
       <input type="file" id="mealPhoto" accept="image/*" multiple style="display:none">
-      <div class="muted" style="margin-top:6px;text-align:center">Mehrere Fotos derselben Mahlzeit möglich (max. 4)</div>
+      <div class="muted" style="margin-top:6px;text-align:center">Mehrfach drücken für weitere Fotos (max. 4) – z.B. Essen + Nährwerttabelle</div>
+      <div id="photoStrip" style="display:none;margin-top:8px;text-align:center"></div>
+      <button class="primary" style="width:100%;margin-top:8px;display:none" id="analyzeBtn">Analysieren</button>
+      <button class="ghost" style="width:100%;margin-top:8px;display:none" id="photoClear">Fotos verwerfen</button>
       <div class="muted" id="mealStatus" style="margin-top:8px;text-align:center"></div>
       <div id="mealResult" style="margin-top:8px;font-size:.9rem;line-height:1.5"></div>
       <div id="fixBox" style="display:none;margin-top:10px">
@@ -226,10 +230,11 @@ details[open] summary::after{content:"▴"}
         <button id="plus">+</button>
       </div>
       <div class="statusLine" id="sweetStatus"></div>
+      <button class="ghost" style="width:100%;margin-top:8px" id="sweetZero">✓ Heute nichts Süßes gehabt</button>
     </div>
     <div class="card">
       <h2>Letzte 14 Tage</h2>
-      <div class="muted">Grün = Budget gehalten (0–1) · Rot = überzogen · Grau = nichts eingetragen</div>
+      <div class="muted">Grün = Budget gehalten (0–1) · Rot = überzogen · Grau = nichts eingetragen. <b>Tag antippen zum Korrigieren.</b></div>
       <div class="dotRow" id="sweetDots"></div>
     </div>
     <div class="card">
@@ -558,10 +563,12 @@ function renderChart(dates){
 /* ---- Budget ---- */
 function renderSweets(){
   var t = todayStr();
+  var has = sweets[t] != null;
   var n = sweets[t] || 0;
   document.getElementById("sweetNum").textContent = n;
   var st = document.getElementById("sweetStatus");
-  if(n === 0){ st.textContent = "Budget noch frei"; st.className = "statusLine none-t"; }
+  if(!has){ st.textContent = "Noch nichts eingetragen"; st.className = "statusLine none-t"; }
+  else if(n === 0){ st.textContent = "✓ Nichts Süßes heute – stark"; st.className = "statusLine ok-t"; }
   else if(n === 1){ st.textContent = "✓ Budget genutzt – im Rahmen"; st.className = "statusLine ok-t"; }
   else { st.textContent = "Budget überzogen – nächste Mahlzeit normal, kein Drama"; st.className = "statusLine over-t"; }
 
@@ -572,15 +579,34 @@ function renderSweets(){
     var key = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
     var v = sweets[key];
     var cls = (v == null) ? "none" : (v <= 1 ? "ok" : "over");
-    html += '<div class="dot '+cls+'" title="'+fmt(key)+'">'+d.getDate()+"</div>";
+    html += '<div class="dot '+cls+'" style="cursor:pointer" data-k="'+key+'">'+d.getDate()+"</div>";
   }
   dots.innerHTML = html;
+  dots.querySelectorAll(".dot").forEach(function(dot){
+    dot.addEventListener("click", function(){
+      var k = dot.dataset.k;
+      var cur = sweets[k];
+      var inp = prompt("Süßigkeiten am " + fmt(k) + " (0 = nichts gehabt, leer lassen = Eintrag löschen):", cur != null ? cur : "");
+      if(inp === null) return;
+      if(inp.trim() === ""){ delete sweets[k]; }
+      else {
+        var n = parseInt(inp);
+        if(isNaN(n) || n < 0) return;
+        sweets[k] = n;
+      }
+      save("wt.sweets", sweets);
+      renderSweets(); renderCoach();
+    });
+  });
 }
 document.getElementById("plus").addEventListener("click", function(){
   var t = todayStr(); sweets[t] = (sweets[t]||0)+1; save("wt.sweets", sweets); renderSweets(); renderCoach();
 });
 document.getElementById("minus").addEventListener("click", function(){
   var t = todayStr(); sweets[t] = Math.max(0,(sweets[t]||0)-1); save("wt.sweets", sweets); renderSweets(); renderCoach();
+});
+document.getElementById("sweetZero").addEventListener("click", function(){
+  var t = todayStr(); sweets[t] = 0; save("wt.sweets", sweets); renderSweets(); renderCoach();
 });
 
 /* ---- Notizen ---- */
@@ -846,7 +872,7 @@ document.getElementById("mSuggest").addEventListener("click", function(){
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 150,
-      system: "Du schaetzt Naehrwerte fuer eine Abnehm-App. Der Nutzer beschreibt eine Mahlzeit oder ein Getraenk in Textform. Nimm eine typische Portion an, falls keine Menge angegeben ist. Antworte AUSSCHLIESSLICH mit einem JSON-Objekt: {\"kcal\":Zahl,\"protein_g\":Zahl,\"annahme\":\"kurz: welche Portionsgroesse du angenommen hast\"}",
+      system: "Du schaetzt Naehrwerte fuer eine Abnehm-App. Der Nutzer beschreibt eine Mahlzeit oder ein Getraenk in Textform. Nimm eine typische Portion an, falls keine Menge angegeben ist, und schaetze im Zweifel eher am oberen Ende (versteckte Fette, Zubereitung einrechnen). Antworte AUSSCHLIESSLICH mit einem JSON-Objekt: {\"kcal\":Zahl,\"protein_g\":Zahl,\"annahme\":\"kurz: welche Portionsgroesse du angenommen hast\"}",
       messages: [{ role: "user", content: name }]
     })
   }).then(function(r){
@@ -913,7 +939,7 @@ function runAnalysis(b64s, correction){
     return { type: "image", source: { type: "base64", media_type: "image/jpeg", data: b64 } };
   });
   var txt = "Analysiere diese Mahlzeit.";
-  if(b64s.length > 1) txt += " Alle Fotos zeigen DIESELBE Mahlzeit (verschiedene Winkel oder Bestandteile) – schätze die Gesamtmenge nur einmal.";
+  if(b64s.length > 1) txt += " Alle Fotos gehoeren zu DERSELBEN Mahlzeit (verschiedene Winkel, Bestandteile oder Verpackung) – schaetze die Gesamtmenge nur einmal. Zeigt ein Foto eine Naehrwerttabelle oder Verpackungsangabe, lies die Werte exakt ab und verrechne sie mit der sichtbaren bzw. angegebenen Menge statt zu schaetzen.";
   if(correction) txt += " Deine vorherige Schaetzung war: " + JSON.stringify(lastResult) + ". Der Nutzer korrigiert dich: \"" + correction + "\". Die Korrektur des Nutzers hat Vorrang vor deiner Bildeinschaetzung – schaetze damit neu.";
   content.push({ type: "text", text: txt });
   fetch("https://api.anthropic.com/v1/messages", {
@@ -927,7 +953,7 @@ function runAnalysis(b64s, correction){
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 400,
-      system: "Du bist ein Ernaehrungs-Schaetzer fuer eine Abnehm-App. Der Nutzer (m, 183 cm, Ziel 85 kg) fotografiert seine Mahlzeit. Schaetze realistisch Kalorien und Protein der GESAMTEN sichtbaren Portion. Korrekturen des Nutzers haben immer Vorrang. Antworte AUSSCHLIESSLICH mit einem JSON-Objekt: {\"gericht\":\"kurzer Name\",\"kcal\":Zahl,\"protein_g\":Zahl,\"einschaetzung\":\"1 Satz: passt die Mahlzeit zu seinen Regeln (Protein-Anker, Beilagen halbieren)?\",\"tipp\":\"1 kurzer konkreter Verbesserungstipp oder Lob\"}",
+      system: "Du bist ein Ernaehrungs-Schaetzer fuer eine Abnehm-App. Der Nutzer (m, 183 cm, Ziel 85 kg) fotografiert seine Mahlzeit. Schaetze realistisch Kalorien und Protein der GESAMTEN sichtbaren Portion. WICHTIG: Foto-Schaetzungen fallen systematisch zu niedrig aus – rechne Oel, Butter, Sossen, Dressing, Panade und uebliche Zubereitungsfette aktiv ein und schaetze im Zweifel am OBEREN Ende der plausiblen Spanne. Zeigt ein Foto eine Naehrwerttabelle, nutze deren exakte Werte. Korrekturen des Nutzers haben immer Vorrang. Antworte AUSSCHLIESSLICH mit einem JSON-Objekt: {\"gericht\":\"kurzer Name\",\"kcal\":Zahl,\"protein_g\":Zahl,\"einschaetzung\":\"1 Satz: passt die Mahlzeit zu seinen Regeln (Protein-Anker, Beilagen halbieren)?\",\"tipp\":\"1 kurzer konkreter Verbesserungstipp oder Lob\"}",
       messages: [{ role: "user", content: content }]
     })
   }).then(function(r){
@@ -961,29 +987,57 @@ function runAnalysis(b64s, correction){
       (left >= 0 ? "Heute noch übrig: <b>" + left + " kcal</b>" : "<b style='color:var(--red)'>Budget um " + Math.abs(left) + " kcal überzogen</b> – morgen normal weiter, kein Drama.");
     document.getElementById("fixBox").style.display = "block";
     document.getElementById("fixText").value = "";
+    pendingPhotos = [];
+    renderStrip();
   }).catch(function(e){
     st.textContent = e.message || "Analyse fehlgeschlagen.";
   });
 }
 
+var pendingPhotos = [];
+function renderStrip(){
+  var strip = document.getElementById("photoStrip");
+  var ab = document.getElementById("analyzeBtn");
+  var pc = document.getElementById("photoClear");
+  if(!pendingPhotos.length){
+    strip.style.display = "none"; ab.style.display = "none"; pc.style.display = "none";
+    return;
+  }
+  strip.style.display = "block";
+  strip.innerHTML = pendingPhotos.map(function(b){ return '<img class="thumb" src="data:image/jpeg;base64,' + b + '">'; }).join("");
+  ab.style.display = "block";
+  ab.textContent = "Analysieren (" + pendingPhotos.length + " Foto" + (pendingPhotos.length > 1 ? "s" : "") + ")";
+  pc.style.display = "block";
+}
 document.getElementById("mealPhoto").addEventListener("change", function(){
-  var files = Array.prototype.slice.call(this.files || []).slice(0, 4);
+  var files = Array.prototype.slice.call(this.files || []).slice(0, 4 - pendingPhotos.length);
   this.value = "";
   if(!files.length) return;
+  Promise.all(files.map(resizeImage)).then(function(b64s){
+    pendingPhotos = pendingPhotos.concat(b64s).slice(0, 4);
+    renderStrip();
+    document.getElementById("mealStatus").textContent = "Weitere Fotos hinzufügen oder analysieren.";
+  }, function(){
+    document.getElementById("mealStatus").textContent = "Foto konnte nicht gelesen werden.";
+  });
+});
+document.getElementById("analyzeBtn").addEventListener("click", function(){
+  if(!pendingPhotos.length) return;
   if(!cfg.key){
-    document.getElementById("mealStatus").textContent = "Bitte zuerst unten in den Einstellungen den API-Schlüssel eintragen.";
+    document.getElementById("mealStatus").textContent = "Bitte zuerst im Ratgeber-Tab den API-Schlüssel eintragen.";
     return;
   }
   document.getElementById("mealResult").innerHTML = "";
   document.getElementById("fixBox").style.display = "none";
-  Promise.all(files.map(resizeImage)).then(function(b64s){
-    lastPhotos = b64s;
-    lastIdx = -1;
-    lastResult = null;
-    runAnalysis(b64s, null);
-  }, function(){
-    document.getElementById("mealStatus").textContent = "Foto konnte nicht gelesen werden.";
-  });
+  lastPhotos = pendingPhotos.slice();
+  lastIdx = -1;
+  lastResult = null;
+  runAnalysis(lastPhotos, null);
+});
+document.getElementById("photoClear").addEventListener("click", function(){
+  pendingPhotos = [];
+  renderStrip();
+  document.getElementById("mealStatus").textContent = "";
 });
 
 document.getElementById("fixSend").addEventListener("click", function(){
