@@ -219,35 +219,6 @@ details[open] summary::after{content:"▴"}
     </datalist>
   </div>
 
-  <!-- BUDGET -->
-  <div class="tab" id="tab-budget">
-    <div class="card">
-      <h2>Süß-Budget heute</h2>
-      <div class="muted">Regel: 1 Süßigkeit pro Tag – du wählst wann (Nussecke zählt).</div>
-      <div class="counter">
-        <button id="minus">−</button>
-        <div class="num" id="sweetNum">0</div>
-        <button id="plus">+</button>
-      </div>
-      <div class="statusLine" id="sweetStatus"></div>
-      <button class="ghost" style="width:100%;margin-top:8px" id="sweetZero">✓ Heute nichts Süßes gehabt</button>
-    </div>
-    <div class="card">
-      <h2>Letzte 14 Tage</h2>
-      <div class="muted">Grün = Budget gehalten (0–1) · Rot = überzogen · Grau = nichts eingetragen. <b>Tag antippen zum Korrigieren.</b></div>
-      <div class="dotRow" id="sweetDots"></div>
-    </div>
-    <div class="card">
-      <h2>Craving-Notfallplan</h2>
-      <div class="muted" style="line-height:1.6">
-        1. 10-Minuten-Timer stellen<br>
-        2. Ortswechsel: raus, Tee holen, Treppe<br>
-        3. Danach frei entscheiden – aus dem Budget, im Sitzen, mit Genuss.<br>
-        Kein Drama. Ziel ist die Pause vor der Entscheidung, nicht null Süßes.
-      </div>
-    </div>
-  </div>
-
   <!-- NOTIZEN -->
   <div class="tab" id="tab-notizen">
     <div class="card">
@@ -329,6 +300,16 @@ details[open] summary::after{content:"▴"}
     </details>
 
     <details>
+      <summary>Craving-Notfallplan</summary>
+      <div class="dbody">
+        1. 10-Minuten-Timer stellen<br>
+        2. Ortswechsel: raus, Tee holen, Treppe<br>
+        3. Danach frei entscheiden – im Sitzen, mit Genuss.<br>
+        Kein Drama. Ziel ist die Pause vor der Entscheidung, nicht null Süßes.
+      </div>
+    </details>
+
+    <details>
       <summary>Sofort-Puffer beim Heimkommen</summary>
       <div class="dbody">
         <span class="pill">0 Minuten</span> Erst Puffer, dann in Ruhe kochen – nie hungrig entscheiden:
@@ -392,7 +373,6 @@ details[open] summary::after{content:"▴"}
   <button data-tab="gewicht" class="active"><span class="ico">⚖️</span>Gewicht</button>
   <button data-tab="essen"><span class="ico">🍽️</span>Essen</button>
   <button data-tab="plan"><span class="ico">📅</span>Plan</button>
-  <button data-tab="budget"><span class="ico">🍫</span>Budget</button>
   <button data-tab="notizen"><span class="ico">📝</span>Notizen</button>
   <button data-tab="ratgeber"><span class="ico">⚙️</span>Ratgeber</button>
 </nav>
@@ -560,54 +540,7 @@ function renderChart(dates){
   });
 }
 
-/* ---- Budget ---- */
-function renderSweets(){
-  var t = todayStr();
-  var has = sweets[t] != null;
-  var n = sweets[t] || 0;
-  document.getElementById("sweetNum").textContent = n;
-  var st = document.getElementById("sweetStatus");
-  if(!has){ st.textContent = "Noch nichts eingetragen"; st.className = "statusLine none-t"; }
-  else if(n === 0){ st.textContent = "✓ Nichts Süßes heute – stark"; st.className = "statusLine ok-t"; }
-  else if(n === 1){ st.textContent = "✓ Budget genutzt – im Rahmen"; st.className = "statusLine ok-t"; }
-  else { st.textContent = "Budget überzogen – nächste Mahlzeit normal, kein Drama"; st.className = "statusLine over-t"; }
-
-  var dots = document.getElementById("sweetDots");
-  var html = "";
-  for(var i=13;i>=0;i--){
-    var d = new Date(); d.setDate(d.getDate()-i);
-    var key = d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
-    var v = sweets[key];
-    var cls = (v == null) ? "none" : (v <= 1 ? "ok" : "over");
-    html += '<div class="dot '+cls+'" style="cursor:pointer" data-k="'+key+'">'+d.getDate()+"</div>";
-  }
-  dots.innerHTML = html;
-  dots.querySelectorAll(".dot").forEach(function(dot){
-    dot.addEventListener("click", function(){
-      var k = dot.dataset.k;
-      var cur = sweets[k];
-      var inp = prompt("Süßigkeiten am " + fmt(k) + " (0 = nichts gehabt, leer lassen = Eintrag löschen):", cur != null ? cur : "");
-      if(inp === null) return;
-      if(inp.trim() === ""){ delete sweets[k]; }
-      else {
-        var n = parseInt(inp);
-        if(isNaN(n) || n < 0) return;
-        sweets[k] = n;
-      }
-      save("wt.sweets", sweets);
-      renderSweets(); renderCoach();
-    });
-  });
-}
-document.getElementById("plus").addEventListener("click", function(){
-  var t = todayStr(); sweets[t] = (sweets[t]||0)+1; save("wt.sweets", sweets); renderSweets(); renderCoach();
-});
-document.getElementById("minus").addEventListener("click", function(){
-  var t = todayStr(); sweets[t] = Math.max(0,(sweets[t]||0)-1); save("wt.sweets", sweets); renderSweets(); renderCoach();
-});
-document.getElementById("sweetZero").addEventListener("click", function(){
-  var t = todayStr(); sweets[t] = 0; save("wt.sweets", sweets); renderSweets(); renderCoach();
-});
+/* ---- Budget-Tab entfernt; Süß-Daten bleiben für Historie/Backup erhalten ---- */
 
 /* ---- Notizen ---- */
 var curWeek = isoWeek(todayStr());
@@ -873,7 +806,7 @@ document.getElementById("mSuggest").addEventListener("click", function(){
       model: "claude-haiku-4-5-20251001",
       max_tokens: 150,
       system: "Du schaetzt Naehrwerte fuer eine Abnehm-App. Der Nutzer beschreibt eine Mahlzeit oder ein Getraenk in Textform. Nimm eine typische Portion an, falls keine Menge angegeben ist, und schaetze im Zweifel eher am oberen Ende (versteckte Fette, Zubereitung einrechnen). Antworte AUSSCHLIESSLICH mit einem JSON-Objekt: {\"kcal\":Zahl,\"protein_g\":Zahl,\"annahme\":\"kurz: welche Portionsgroesse du angenommen hast\"}",
-      messages: [{ role: "user", content: name }]
+      messages: [{ role: "user", content: name + (historyRef() ? "\n\nFruehere Eintraege des Nutzers als Referenz (teils korrigiert, daher verlaesslich): " + historyRef() + ". Entspricht die Beschreibung einem dieser Eintraege, nutze dessen Werte, skaliert auf die angegebene Menge." : "") }]
     })
   }).then(function(r){
     if(r.status === 401) throw new Error("API-Schlüssel ungültig.");
@@ -931,6 +864,22 @@ function resizeImage(file){
 
 var lastPhotos = null, lastIdx = -1, lastResult = null;
 
+function historyRef(){
+  var seen = {}, out = [];
+  var dates = Object.keys(meals).sort().reverse().slice(0, 90);
+  for(var di = 0; di < dates.length && out.length < 30; di++){
+    var arr = meals[dates[di]] || [];
+    for(var mi = arr.length - 1; mi >= 0 && out.length < 30; mi--){
+      var m = arr[mi];
+      var key = (m.name || "").toLowerCase().trim();
+      if(!key || seen[key]) continue;
+      seen[key] = 1;
+      out.push(m.name + ": " + m.kcal + " kcal, " + Math.round(m.p || 0) + " g P");
+    }
+  }
+  return out.join("; ");
+}
+
 function runAnalysis(b64s, correction){
   var st = document.getElementById("mealStatus");
   var res = document.getElementById("mealResult");
@@ -941,6 +890,8 @@ function runAnalysis(b64s, correction){
   var txt = "Analysiere diese Mahlzeit.";
   if(b64s.length > 1) txt += " Alle Fotos gehoeren zu DERSELBEN Mahlzeit (verschiedene Winkel, Bestandteile oder Verpackung) – schaetze die Gesamtmenge nur einmal. Zeigt ein Foto eine Naehrwerttabelle oder Verpackungsangabe, lies die Werte exakt ab und verrechne sie mit der sichtbaren bzw. angegebenen Menge statt zu schaetzen.";
   if(correction) txt += " Deine vorherige Schaetzung war: " + JSON.stringify(lastResult) + ". Der Nutzer korrigiert dich: \"" + correction + "\". Die Korrektur des Nutzers hat Vorrang vor deiner Bildeinschaetzung – schaetze damit neu.";
+  var ref = historyRef();
+  if(ref) txt += " Fruehere Eintraege des Nutzers als Referenz (teils von ihm korrigiert, daher verlaesslich): " + ref + ". Entspricht die Mahlzeit einem dieser Eintraege, orientiere dich an dessen Werten, skaliert auf die sichtbare Portion.";
   content.push({ type: "text", text: txt });
   fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -1071,7 +1022,8 @@ function buildCoachContext(){
   var lines = ["Meine kompletten App-Daten (Stand " + fmt(t) + "):", "", "— HEUTE —"];
   lines.push("Gegessen: " + (list.length ? list.map(function(m){ return (m.t ? m.t + " " : "") + m.name + " (" + m.kcal + " kcal, " + Math.round(m.p || 0) + " g P)"; }).join("; ") : "noch nichts"));
   lines.push("Summe: " + kcal + " kcal, " + Math.round(prot) + " g Protein. Budget " + cfg.kcal + (bonus ? " + " + bonus + " Bewegungsbonus" : "") + " → noch " + left + " kcal. Protein-Ziel " + cfg.prot + " g → fehlen " + Math.max(0, cfg.prot - Math.round(prot)) + " g.");
-  lines.push("Süß-Budget: " + (sweet === 0 ? "noch frei" : sweet === 1 ? "genutzt" : "überzogen (" + sweet + ")") + (act ? ". Aktivität: " + act + " kcal." : "."));
+  if(sweets[t] != null) lines.push("Süß-Budget: " + (sweet === 0 ? "nichts gehabt" : sweet === 1 ? "genutzt" : "überzogen (" + sweet + ")") + ".");
+  if(act) lines.push("Aktivität: " + act + " kcal.");
   lines.push("");
   lines.push("— LETZTE 14 TAGE —");
   for(var i = 1; i <= 14; i++){
@@ -1258,14 +1210,13 @@ document.getElementById("bkImport").addEventListener("click", function(){
     save("wt.weights", weights); save("wt.sweets", sweets); save("wt.notes", notes); save("wt.meals", meals); save("wt.activity", activity); save("wt.plan", plan);
     document.getElementById("bkText").value = "";
     document.getElementById("bkMsg").textContent = "✓ Wiederhergestellt";
-    renderWeight(); renderSweets(); renderNotes(); renderCoach(); renderMeals(); renderPlan();
+    renderWeight(); renderNotes(); renderCoach(); renderMeals(); renderPlan();
   } catch(e){
     document.getElementById("bkMsg").textContent = "Ungültiges Backup – bitte kompletten Text einfügen.";
   }
 });
 
 renderWeight();
-renderSweets();
 renderNotes();
 renderCoach();
 renderMeals();
