@@ -172,6 +172,7 @@ details[open] summary::after{content:"▴"}
       <h2>Manuell nachtragen</h2>
       <input type="text" id="mName" placeholder="z.B. Kaffee mit Milch, 2 Kugeln Eis…" style="margin-bottom:8px">
       <button class="primary" style="width:100%;margin-bottom:8px" id="mSuggest">Kalorien-Vorschlag holen</button>
+      <button class="ghost" style="width:100%;margin-bottom:8px;display:none" id="mFresh">🔄 Trotzdem per KI neu schätzen</button>
       <div class="row" style="margin-bottom:8px">
         <input type="number" id="mKcal" placeholder="kcal" inputmode="numeric" style="flex:1">
         <input type="number" id="mProt" placeholder="Protein g" inputmode="numeric" style="flex:1">
@@ -226,12 +227,7 @@ details[open] summary::after{content:"▴"}
       <div class="muted" style="margin-bottom:8px">Was lief gut? Was war schwer? (Sonntags-Check-in)</div>
       <textarea id="noteText" placeholder="z.B. Kantine 2× gut gewählt, Freitag Craving verloren…"></textarea>
       <button class="primary" style="width:100%;margin-top:8px" id="noteSave">Notiz speichern</button>
-    </div>
-    <div class="card">
-      <h2>🤖 Persönliche Analyse von Claude</h2>
-      <div class="muted" style="line-height:1.55">Kopiert deine Daten der letzten 4 Wochen. Füge sie in einen Chat mit Claude ein – du bekommst eine individuelle Auswertung mit neuen Ratschlägen.</div>
-      <button class="primary" style="width:100%;margin-top:10px" id="exportBtn">Daten für Claude kopieren</button>
-      <div class="muted" id="exportDone" style="margin-top:6px;text-align:center"></div>
+      <div class="muted" id="noteMsg" style="margin-top:6px;text-align:center"></div>
     </div>
 
     <div class="card">
@@ -551,6 +547,7 @@ document.getElementById("noteSave").addEventListener("click", function(){
   if(txt){ notes[curWeek] = txt; } else { delete notes[curWeek]; }
   save("wt.notes", notes);
   renderNotes();
+  document.getElementById("noteMsg").textContent = txt ? "✓ Notiz für Woche " + curWeek.split("-W")[1] + " gespeichert" : "Notiz gelöscht";
 });
 function weekAvg(weekKey){
   var vals = [];
@@ -626,26 +623,6 @@ function renderCoach(){
   document.getElementById("coachTips").innerHTML = tips.slice(0,3).map(function(t){ return "<div>"+t+"</div>"; }).join("");
 }
 
-/* ---- Export für Claude ---- */
-function buildExport(){
-  var dates = sortedDates(weights);
-  var lines = ["Meine Abnehm-Daten (Start: 107 kg, Ziel: 85 kg, 183 cm). Bitte analysiere Trend und Muster und gib mir 3 konkrete neue Ratschläge. Meine Regeln: 2 Mahlzeiten/Tag mit Protein-Anker, 1 Süßigkeit/Tag als Budget, Kantine (Salat mit Hühnchen/Eintopf/Schnitzel) oder Bäcker + Supermarkt-Protein, Alkohol nur zu Anlässen.",""];
-  var start = shiftDate(todayStr(), -27);
-  var recent = dates.filter(function(d){ return d >= start; });
-  lines.push("Gewicht (letzte 4 Wochen):");
-  if(recent.length){ recent.forEach(function(d){ lines.push(d+": "+weights[d].toFixed(1)+" kg"); }); }
-  else lines.push("(noch keine Einträge)");
-  var cur = dates.length ? avgLastNDays(dates[dates.length-1],7) : null;
-  if(cur != null) lines.push("Aktueller 7-Tage-Schnitt: "+cur.toFixed(1)+" kg");
-  var ok=0, ov=0, none=0;
-  for(var i=0;i<14;i++){ var v=sweets[shiftDate(todayStr(),-i)]; if(v==null) none++; else if(v<=1) ok++; else ov++; }
-  lines.push("");
-  lines.push("Süß-Budget letzte 14 Tage: "+ok+"× gehalten, "+ov+"× überzogen, "+none+"× nicht erfasst");
-  var wk = isoWeek(todayStr());
-  var noteKeys = Object.keys(notes).sort().reverse().slice(0,4);
-  if(noteKeys.length){ lines.push(""); lines.push("Wochen-Notizen:"); noteKeys.forEach(function(k){ lines.push(k+": "+notes[k]); }); }
-  return lines.join("\n");
-}
 function copyText(t){
   if(navigator.clipboard && navigator.clipboard.writeText){ return navigator.clipboard.writeText(t); }
   var ta = document.createElement("textarea"); ta.value = t;
@@ -654,14 +631,6 @@ function copyText(t){
   document.body.removeChild(ta);
   return Promise.resolve();
 }
-document.getElementById("exportBtn").addEventListener("click", function(){
-  copyText(buildExport()).then(function(){
-    document.getElementById("exportDone").textContent = "✓ Kopiert – jetzt in der Claude-App einfügen";
-  }, function(){
-    document.getElementById("exportDone").textContent = "Kopieren fehlgeschlagen – bitte erneut versuchen";
-  });
-});
-
 /* ---- Essen (Foto-Tracker) ---- */
 var meals = load("wt.meals", {});   // {"2026-08-02":[{t:"12:30",name,kcal,p}]}
 var cfg   = load("wt.cfg", { kcal: 2100, prot: 140, key: "" });
@@ -788,10 +757,8 @@ function addMeal(name, kcal, p, dateOpt){
   renderMeals();
 }
 
-document.getElementById("mSuggest").addEventListener("click", function(){
-  var name = document.getElementById("mName").value.trim();
+function apiSuggest(name){
   var msg = document.getElementById("mMsg");
-  if(!name){ msg.textContent = "Bitte erst eingeben, was du gegessen hast."; return; }
   if(!cfg.key){ msg.textContent = "Kein API-Schlüssel hinterlegt – Werte bitte selbst eintragen."; return; }
   msg.textContent = "Schätze …";
   fetch("https://api.anthropic.com/v1/messages", {
@@ -823,6 +790,28 @@ document.getElementById("mSuggest").addEventListener("click", function(){
   }).catch(function(e){
     msg.textContent = e.message || "Schätzung fehlgeschlagen.";
   });
+}
+
+document.getElementById("mSuggest").addEventListener("click", function(){
+  var name = document.getElementById("mName").value.trim();
+  var msg = document.getElementById("mMsg");
+  document.getElementById("mFresh").style.display = "none";
+  if(!name){ msg.textContent = "Bitte erst eingeben, was du gegessen hast."; return; }
+  var refm = findRef(name);
+  if(refm){
+    document.getElementById("mKcal").value = refm.kcal;
+    document.getElementById("mProt").value = Math.round(refm.p || 0);
+    msg.textContent = "Aus deiner Historie: " + refm.kcal + " kcal, " + Math.round(refm.p || 0) + " g Protein – anpassen, hinzufügen oder neu schätzen lassen.";
+    document.getElementById("mFresh").style.display = "block";
+    return;
+  }
+  apiSuggest(name);
+});
+document.getElementById("mFresh").addEventListener("click", function(){
+  var name = document.getElementById("mName").value.trim();
+  if(!name) return;
+  this.style.display = "none";
+  apiSuggest(name);
 });
 
 document.getElementById("mDate").value = todayStr();
@@ -863,6 +852,20 @@ function resizeImage(file){
 }
 
 var lastPhotos = null, lastIdx = -1, lastResult = null;
+
+function findRef(name){
+  if(!name) return null;
+  var key = name.toLowerCase().trim();
+  if(!key) return null;
+  var dates = Object.keys(meals).sort().reverse();
+  for(var di = 0; di < dates.length; di++){
+    var arr = meals[dates[di]] || [];
+    for(var mi = arr.length - 1; mi >= 0; mi--){
+      if((arr[mi].name || "").toLowerCase().trim() === key) return arr[mi];
+    }
+  }
+  return null;
+}
 
 function historyRef(){
   var seen = {}, out = [];
@@ -917,6 +920,12 @@ function runAnalysis(b64s, correction){
     var m = t.match(/\{[\s\S]*\}/);
     if(!m) throw new Error("Antwort nicht lesbar – bitte nochmal versuchen.");
     var j = JSON.parse(m[0]);
+    var aiKcal = Math.round(j.kcal || 0), aiP = Math.round(j.protein_g || 0);
+    var fromHist = false;
+    if(!correction){
+      var refm = findRef(j.gericht);
+      if(refm){ j.kcal = refm.kcal; j.protein_g = refm.p || 0; fromHist = true; }
+    }
     lastResult = j;
     var arr = meals[todayStr()] || [];
     if(correction && lastIdx >= 0 && arr[lastIdx]){
@@ -932,10 +941,27 @@ function runAnalysis(b64s, correction){
     var act = activity[todayStr()] || 0;
     var left = cfg.kcal + Math.round(act * 0.5) - todayMeals().reduce(function(s, x){ return s + x.kcal; }, 0);
     st.textContent = "";
-    res.innerHTML = "<b>" + (j.gericht || "Mahlzeit") + "</b>: ca. " + j.kcal + " kcal, " + j.protein_g + " g Protein" + (correction ? " <span class='muted'>(korrigiert)</span>" : "") + "<br>" +
+    res.innerHTML = "<b>" + (j.gericht || "Mahlzeit") + "</b>: ca. " + j.kcal + " kcal, " + j.protein_g + " g Protein" + (correction ? " <span class='muted'>(korrigiert)</span>" : fromHist ? " <span class='muted'>(aus deiner Historie übernommen)</span>" : "") + "<br>" +
       (j.einschaetzung ? j.einschaetzung + "<br>" : "") +
       (j.tipp ? "💡 " + j.tipp + "<br>" : "") +
-      (left >= 0 ? "Heute noch übrig: <b>" + left + " kcal</b>" : "<b style='color:var(--red)'>Budget um " + Math.abs(left) + " kcal überzogen</b> – morgen normal weiter, kein Drama.");
+      (left >= 0 ? "Heute noch übrig: <b>" + left + " kcal</b>" : "<b style='color:var(--red)'>Budget um " + Math.abs(left) + " kcal überzogen</b> – morgen normal weiter, kein Drama.") +
+      (fromHist && (aiKcal !== j.kcal || aiP !== Math.round(j.protein_g || 0)) ? '<br><span class="muted">Frische KI-Schätzung wäre: ' + aiKcal + ' kcal, ' + aiP + ' g P</span> <button class="ghost" id="useAiBtn" style="padding:6px 10px;margin-top:4px">KI-Wert übernehmen</button>' : "");
+    var uab = document.getElementById("useAiBtn");
+    if(uab){
+      uab.addEventListener("click", function(){
+        var arr2 = meals[todayStr()] || [];
+        if(arr2[lastIdx]){
+          arr2[lastIdx].kcal = aiKcal;
+          arr2[lastIdx].p = aiP;
+          save("wt.meals", meals);
+          renderMeals();
+        }
+        lastResult.kcal = aiKcal;
+        lastResult.protein_g = aiP;
+        uab.disabled = true;
+        uab.textContent = "✓ KI-Wert übernommen";
+      });
+    }
     document.getElementById("fixBox").style.display = "block";
     document.getElementById("fixText").value = "";
     pendingPhotos = [];
