@@ -169,7 +169,7 @@ details[open] summary::after{content:"▴"}
     </div>
 
     <div class="card">
-      <h2>Manuell nachtragen</h2>
+      <h2>Nachtragen (mit KI-Schätzung)</h2>
       <input type="text" id="mName" placeholder="z.B. Kaffee mit Milch, 2 Kugeln Eis…" style="margin-bottom:8px">
       <button class="primary" style="width:100%;margin-bottom:8px" id="mSuggest">Kalorien-Vorschlag holen</button>
       <button class="ghost" style="width:100%;margin-bottom:8px;display:none" id="mFresh">🔄 Trotzdem per KI neu schätzen</button>
@@ -734,7 +734,7 @@ function renderMeals(){
       '<b style="color:' + (over ? "var(--red)" : "var(--green)") + ';font-weight:700">' + hk + ' kcal · ' + Math.round(hp) + 'g P</b></summary>' +
       '<div class="dbody" style="padding:0 0 10px">' +
       hml.map(function(m, i){ return mealRowHtml(m, hd, i); }).join("") +
-      '<button class="ghost histAdd" data-hd="' + hd + '" style="width:100%;margin-top:8px">+ Mahlzeit für diesen Tag ergänzen</button>' +
+      '<button class="ghost histAdd" data-hd="' + hd + '" style="width:100%;margin-top:8px">+ Mahlzeit ergänzen (mit KI-Schätzung)</button>' +
       '</div></details>');
   }
   histEl.innerHTML = histLines.length ? histLines.join("") : '<div class="muted">Noch keine früheren Tage erfasst. Tag antippen zum Bearbeiten.</div>';
@@ -745,15 +745,17 @@ function renderMeals(){
   histEl.querySelectorAll(".histAdd").forEach(function(b){
     b.addEventListener("click", function(){
       var hd = b.dataset.hd;
-      var name = prompt("Was hast du am " + fmt(hd) + " noch gegessen?");
-      if(!name || !name.trim()) return;
-      var kcal = prompt("Kalorien (kcal):", "");
-      if(kcal === null) return;
-      var kc = parseInt(kcal);
-      if(isNaN(kc)){ alert("Bitte eine Zahl eingeben."); return; }
-      var p = prompt("Protein (g, optional):", "0");
       histOpen[hd] = true;
-      addMeal(name.trim(), kc, parseFloat(p) || 0, hd);
+      document.getElementById("mDate").value = hd;
+      document.getElementById("mName").value = "";
+      document.getElementById("mKcal").value = "";
+      document.getElementById("mProt").value = "";
+      document.getElementById("mFixBox").style.display = "none";
+      document.getElementById("mFresh").style.display = "none";
+      document.getElementById("mMsg").textContent = "Nachtrag für " + fmt(hd) + ": eingeben, Vorschlag holen, hinzufügen.";
+      var card = document.getElementById("mName").closest(".card");
+      card.scrollIntoView({ behavior: "smooth", block: "center" });
+      setTimeout(function(){ document.getElementById("mName").focus(); }, 350);
     });
   });
 }
