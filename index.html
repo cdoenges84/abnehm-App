@@ -212,7 +212,7 @@ details[open] summary::after{content:"▴"}
 
     <div class="card">
       <h2>💾 Backup</h2>
-      <div class="muted" style="line-height:1.55">Sichert alle Daten (Gewicht, Budget, Notizen) als Text. Ab und zu kopieren und z.B. in Apple Notizen ablegen – dann kann nie etwas verloren gehen.</div>
+      <div class="muted" style="line-height:1.55">Sichert <b>alle</b> Daten der App als Text – Gewichte, Mahlzeiten, Aktivität, Notizen, Einstellungen (ohne API-Schlüssel). Ab und zu kopieren und z.B. in Apple Notizen ablegen – dann kann nie etwas verloren gehen.</div>
       <button class="primary" style="width:100%;margin-top:10px" id="bkExport">Backup kopieren</button>
       <textarea id="bkText" placeholder="Zum Wiederherstellen: Backup-Text hier einfügen…" style="margin-top:10px;min-height:60px"></textarea>
       <button class="ghost" style="width:100%;margin-top:8px" id="bkImport">Backup wiederherstellen</button>
@@ -1081,8 +1081,8 @@ function buildCoachContext(){
   if(sweets[t] != null) lines.push("Süß-Budget: " + (sweet === 0 ? "nichts gehabt" : sweet === 1 ? "genutzt" : "überzogen (" + sweet + ")") + ".");
   if(act) lines.push("Aktivität: " + act + " kcal.");
   lines.push("");
-  lines.push("— LETZTE 14 TAGE —");
-  for(var i = 1; i <= 14; i++){
+  lines.push("— LETZTE 30 TAGE —");
+  for(var i = 1; i <= 30; i++){
     var d = shiftDate(t, -i);
     var parts = [];
     if(weights[d] != null) parts.push(weights[d].toFixed(1) + " kg");
@@ -1090,7 +1090,7 @@ function buildCoachContext(){
     if(ml.length){
       var mk = 0, mp = 0;
       ml.forEach(function(m){ mk += m.kcal || 0; mp += m.p || 0; });
-      parts.push(mk + " kcal, " + Math.round(mp) + " g P (" + ml.map(function(m){ return m.name; }).join(", ") + ")");
+        parts.push(mk + " kcal, " + Math.round(mp) + " g P [" + ml.map(function(m){ return m.name + " " + m.kcal + "/" + Math.round(m.p || 0) + "g"; }).join(", ") + "]");
     }
     var sv = sweets[d];
     if(sv != null) parts.push("Süß: " + (sv <= 1 ? "ok" : "überzogen (" + sv + ")"));
@@ -1101,7 +1101,12 @@ function buildCoachContext(){
     var prev = dates.length ? avgLastNDays(shiftDate(dates[dates.length - 1], -7), 7) : null;
     lines.push("7-Tage-Schnitt: " + avg.toFixed(1) + " kg" + (prev != null ? " (Vorwoche: " + prev.toFixed(1) + " kg)" : "") + ". Start 107, Ziel 85.");
   }
-  var noteKeys = Object.keys(notes).sort().reverse().slice(0, 4);
+  if(dates.length){
+    lines.push("");
+    lines.push("— GESAMTE GEWICHTSHISTORIE (" + dates.length + " Einträge) —");
+    lines.push(dates.map(function(d){ return fmt(d) + " " + weights[d].toFixed(1); }).join(" | "));
+  }
+  var noteKeys = Object.keys(notes).sort().reverse();
   if(noteKeys.length){
     lines.push("");
     lines.push("— WOCHEN-NOTIZEN —");
@@ -1201,10 +1206,24 @@ document.getElementById("shopSpeak").addEventListener("click", function(){
 });
 
 /* ---- Backup ---- */
+function buildBackup(){
+  var out = { v: 4, exported: todayStr(), store: {} };
+  for(var i = 0; i < localStorage.length; i++){
+    var k = localStorage.key(i);
+    if(k && k.indexOf("wt.") === 0) out.store[k] = localStorage.getItem(k);
+  }
+  if(out.store["wt.cfg"]){
+    try { var c = JSON.parse(out.store["wt.cfg"]); delete c.key; out.store["wt.cfg"] = JSON.stringify(c); } catch(e){}
+  }
+  return JSON.stringify(out);
+}
 document.getElementById("bkExport").addEventListener("click", function(){
-  var data = JSON.stringify({ v:3, exported: todayStr(), weights: weights, sweets: sweets, notes: notes, meals: meals, activity: activity, plan: plan, budget: { kcal: cfg.kcal, prot: cfg.prot } });
-  copyText(data).then(function(){
-    document.getElementById("bkMsg").textContent = "✓ Backup kopiert – sicher ablegen (z.B. Apple Notizen)";
+  var txt = buildBackup();
+  var cnt = Object.keys(meals).length;
+  copyText(txt).then(function(){
+    document.getElementById("bkMsg").textContent = "✓ Komplett-Backup kopiert (" + Object.keys(weights).length + " Gewichts-, " + cnt + " Essenstage) – sicher ablegen";
+  }, function(){
+    document.getElementById("bkMsg").textContent = "Kopieren fehlgeschlagen – bitte erneut versuchen.";
   });
 });
 document.getElementById("bkImport").addEventListener("click", function(){
@@ -1212,19 +1231,33 @@ document.getElementById("bkImport").addEventListener("click", function(){
   if(!txt){ document.getElementById("bkMsg").textContent = "Bitte erst Backup-Text einfügen."; return; }
   try {
     var data = JSON.parse(txt);
-    if(!data || typeof data !== "object" || !data.weights) throw new Error("bad");
+    if(!data || typeof data !== "object") throw new Error("bad");
     if(!confirm("Backup wiederherstellen? Vorhandene Einträge werden zusammengeführt (Backup gewinnt bei Konflikten).")) return;
-    Object.keys(data.weights || {}).forEach(function(k){ weights[k] = data.weights[k]; });
-    Object.keys(data.sweets || {}).forEach(function(k){ sweets[k] = data.sweets[k]; });
-    Object.keys(data.notes || {}).forEach(function(k){ notes[k] = data.notes[k]; });
-    Object.keys(data.meals || {}).forEach(function(k){ meals[k] = data.meals[k]; });
-    Object.keys(data.activity || {}).forEach(function(k){ activity[k] = data.activity[k]; });
-    Object.keys(data.plan || {}).forEach(function(k){ plan[k] = data.plan[k]; });
-    if(data.budget){ cfg.kcal = data.budget.kcal || cfg.kcal; cfg.prot = data.budget.prot || cfg.prot; save("wt.cfg", cfg); }
-    save("wt.weights", weights); save("wt.sweets", sweets); save("wt.notes", notes); save("wt.meals", meals); save("wt.activity", activity); save("wt.plan", plan);
+    if(data.store){
+      Object.keys(data.store).forEach(function(k){
+        var incoming;
+        try { incoming = JSON.parse(data.store[k]); } catch(e){ return; }
+        var cur = load(k, null);
+        if(cur && incoming && typeof cur === "object" && typeof incoming === "object" && !Array.isArray(cur) && !Array.isArray(incoming)){
+          Object.keys(incoming).forEach(function(kk){ cur[kk] = incoming[kk]; });
+          save(k, cur);
+        } else {
+          save(k, incoming);
+        }
+      });
+    } else {
+      if(!data.weights) throw new Error("bad");
+      Object.keys(data.weights || {}).forEach(function(k){ weights[k] = data.weights[k]; });
+      Object.keys(data.sweets || {}).forEach(function(k){ sweets[k] = data.sweets[k]; });
+      Object.keys(data.notes || {}).forEach(function(k){ notes[k] = data.notes[k]; });
+      Object.keys(data.meals || {}).forEach(function(k){ meals[k] = data.meals[k]; });
+      Object.keys(data.activity || {}).forEach(function(k){ activity[k] = data.activity[k]; });
+      if(data.budget){ cfg.kcal = data.budget.kcal || cfg.kcal; cfg.prot = data.budget.prot || cfg.prot; save("wt.cfg", cfg); }
+      save("wt.weights", weights); save("wt.sweets", sweets); save("wt.notes", notes); save("wt.meals", meals); save("wt.activity", activity);
+    }
     document.getElementById("bkText").value = "";
-    document.getElementById("bkMsg").textContent = "✓ Wiederhergestellt";
-    renderWeight(); renderNotes(); renderCoach(); renderMeals();
+    document.getElementById("bkMsg").textContent = "✓ Wiederhergestellt – App wird neu geladen …";
+    setTimeout(function(){ location.reload(); }, 800);
   } catch(e){
     document.getElementById("bkMsg").textContent = "Ungültiges Backup – bitte kompletten Text einfügen.";
   }
