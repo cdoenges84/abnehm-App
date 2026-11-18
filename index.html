@@ -836,7 +836,7 @@ function apiSuggest(name, fix){
     document.getElementById("mFixBox").style.display = "block";
     document.getElementById("mFixText").value = "";
   }).catch(function(e){
-    msg.textContent = e.message || "Schätzung fehlgeschlagen.";
+    msg.textContent = netMsg(e);
   });
 }
 
@@ -894,13 +894,21 @@ function resizeImage(file){
     reader.onload = function(){
       var img = new Image();
       img.onload = function(){
-        var max = 1568;
-        var scale = Math.min(1, max / Math.max(img.width, img.height));
-        var c = document.createElement("canvas");
-        c.width = Math.round(img.width * scale);
-        c.height = Math.round(img.height * scale);
-        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-        resolve(c.toDataURL("image/jpeg", 0.9).split(",")[1]);
+        // Schrittweise verkleinern, bis das Bild klein genug für einen stabilen Upload ist
+        function enc(max, q){
+          var scale = Math.min(1, max / Math.max(img.width, img.height));
+          var cv = document.createElement("canvas");
+          cv.width = Math.round(img.width * scale);
+          cv.height = Math.round(img.height * scale);
+          cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+          return cv.toDataURL("image/jpeg", q).split(",")[1];
+        }
+        var steps = [[1280, 0.80], [1024, 0.75], [800, 0.70], [640, 0.62]];
+        var out = enc(steps[0][0], steps[0][1]);
+        for(var si = 1; si < steps.length && out.length > 700000; si++){
+          out = enc(steps[si][0], steps[si][1]);
+        }
+        resolve(out);
       };
       img.onerror = reject;
       img.src = reader.result;
@@ -942,9 +950,23 @@ function historyRef(){
   return out.join("; ");
 }
 
+function netMsg(e){
+  var m = (e && e.message) || "";
+  if(/load failed|failed to fetch|networkerror|network request/i.test(m)){
+    return "Verbindung fehlgeschlagen – Foto evtl. zu groß oder Netz instabil. Nochmal versuchen, ggf. mit nur einem Foto.";
+  }
+  return m || "Analyse fehlgeschlagen.";
+}
+
 function runAnalysis(b64s, correction){
   var st = document.getElementById("mealStatus");
   var res = document.getElementById("mealResult");
+  var bytes = 0;
+  b64s.forEach(function(b){ bytes += b.length; });
+  if(bytes > 3000000){
+    st.textContent = "Fotos zu groß (" + Math.round(bytes / 1024 / 1024 * 0.75) + " MB) – bitte weniger Fotos auf einmal analysieren.";
+    return;
+  }
   st.textContent = correction ? "Korrigiere Schätzung …" : (b64s.length > 1 ? "Analysiere " + b64s.length + " Fotos …" : "Analysiere Foto …");
   var content = b64s.map(function(b64){
     return { type: "image", source: { type: "base64", media_type: "image/jpeg", data: b64 } };
@@ -1029,7 +1051,7 @@ function runAnalysis(b64s, correction){
     pendingPhotos = [];
     renderStrip();
   }).catch(function(e){
-    st.textContent = e.message || "Analyse fehlgeschlagen.";
+    st.textContent = netMsg(e);
   });
 }
 
