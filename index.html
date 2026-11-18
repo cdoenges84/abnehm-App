@@ -778,6 +778,28 @@ function addMeal(name, kcal, p, dateOpt){
   renderMeals();
 }
 
+// Antworttext aus allen Textblöcken zusammensetzen (neuere Modelle liefern davor Denk-Blöcke)
+function textOf(data){
+  var blocks = (data && data.content) || [];
+  var out = [];
+  for(var i = 0; i < blocks.length; i++){
+    if(blocks[i] && blocks[i].type === "text" && blocks[i].text) out.push(blocks[i].text);
+  }
+  if(!out.length){
+    for(var k = 0; k < blocks.length; k++){ if(blocks[k] && typeof blocks[k].text === "string") out.push(blocks[k].text); }
+  }
+  return out.join("\n");
+}
+
+function apiErr(r, data){
+  var msg = (data && data.error && data.error.message) ? data.error.message : "";
+  if(r.status === 401) return "API-Schlüssel ungültig – bitte in den Einstellungen prüfen.";
+  if(r.status === 429) return "Zu viele Anfragen – kurz warten und erneut versuchen.";
+  if(r.status === 400 && /credit|balance|quota/i.test(msg)) return "Kein Guthaben auf dem API-Konto.";
+  if(r.status === 404 || /model/i.test(msg)) return "Modell nicht verfügbar – im Ratgeber ein anderes Analyse-Modell wählen.";
+  return "Fehler " + r.status + (msg ? ": " + msg.slice(0, 140) : " – bitte erneut versuchen.");
+}
+
 function apiSuggest(name, fix){
   var msg = document.getElementById("mMsg");
   if(!cfg.key){ msg.textContent = "Kein API-Schlüssel hinterlegt – Werte bitte selbst eintragen."; return; }
@@ -796,18 +818,17 @@ function apiSuggest(name, fix){
     },
     body: JSON.stringify({
       model: cfg.model || "claude-sonnet-5-5",
-      max_tokens: 400,
+      max_tokens: 3000,
       system: "Du bist Ernaehrungswissenschaftler und schaetzt Naehrwerte fuer eine Abnehm-App. Der Nutzer beschreibt eine Mahlzeit oder ein Getraenk in Textform. Zerlege sie gedanklich in Komponenten mit Grammangaben, rechne jede einzeln und addiere. Nimm eine typische Portion an, falls keine Menge genannt ist. Rechne Zubereitungsfett, Sossen und Dressings aktiv ein und waehle bei Unsicherheit das obere Ende der plausiblen Spanne. Antworte AUSSCHLIESSLICH mit einem JSON-Objekt: {\"kcal\":Zahl,\"protein_g\":Zahl,\"annahme\":\"kurz: angenommene Portionsgroesse und Hauptbestandteile\"}",
       messages: [{ role: "user", content: utext }]
     })
   }).then(function(r){
-    if(r.status === 401) throw new Error("API-Schlüssel ungültig.");
-    if(!r.ok) throw new Error("Fehler " + r.status + " – bitte erneut versuchen.");
+    if(!r.ok) return r.json().catch(function(){ return null; }).then(function(d){ throw new Error(apiErr(r, d)); });
     return r.json();
   }).then(function(data){
-    var t = (data.content && data.content[0] && data.content[0].text) || "";
+    var t = textOf(data);
     var m = t.match(/\{[\s\S]*\}/);
-    if(!m) throw new Error("Antwort nicht lesbar.");
+    if(!m) throw new Error(data && data.stop_reason === "max_tokens" ? "Antwort abgebrochen – bitte erneut versuchen." : "Antwort nicht lesbar – bitte erneut versuchen.");
     var j = JSON.parse(m[0]);
     document.getElementById("mKcal").value = Math.round(j.kcal || 0);
     document.getElementById("mProt").value = Math.round(j.protein_g || 0);
@@ -944,19 +965,17 @@ function runAnalysis(b64s, correction){
     },
     body: JSON.stringify({
       model: cfg.model || "claude-sonnet-5-5",
-      max_tokens: 1200,
+      max_tokens: 6000,
       system: "Du bist Ernaehrungswissenschaftler und schaetzt Naehrwerte von Essensfotos fuer eine Abnehm-App (Nutzer: m, 183 cm, Ziel 85 kg).\n\nARBEITE IN DIESER REIHENFOLGE, bevor du antwortest:\n1. Benenne JEDE sichtbare Komponente einzeln (Fleisch, Beilage, Gemuese, Sosse, Brot, Getraenk, Belag, Oel).\n2. Schaetze fuer jede Komponente die Menge in Gramm bzw. ml. Nutze Referenzobjekte im Bild zur Kalibrierung: Teller (Standard 26-28 cm), Besteck, Glas, Hand, Verpackung. Ein normal gefuellter Essteller enthaelt meist 400-700 g Speise.\n3. Rechne jede Komponente mit realistischen Naehrwerten pro 100 g.\n4. Addiere und pruefe das Ergebnis auf Plausibilitaet gegen typische Werte des Gerichts.\n\nHAEUFIGE FEHLERQUELLEN, die du aktiv einrechnen musst:\n- Zubereitungsfett: Gebratenes zieht 10-20 ml Oel/Butter (ca. 90-180 kcal), Panade saugt zusaetzlich Fett.\n- Sossen und Dressings: Rahm-/Cremesossen 150-300 kcal pro Portion, Salatdressing 100-200 kcal; auch wenn kaum sichtbar.\n- Unsichtbare Zutaten: Zucker in Sossen, Butter am Gemuese, Kaese unter dem Belag.\n- Hoehe und Dichte: Fotos von oben lassen Portionen flach wirken – Volumen eher hoeher ansetzen.\nBei Unsicherheit waehle das OBERE Ende der plausiblen Spanne.\n\nZeigt ein Foto eine Naehrwerttabelle oder Verpackung, lies die Werte exakt ab und rechne sie auf die tatsaechlich gegessene Menge hoch – das hat Vorrang vor jeder Schaetzung. Korrekturen des Nutzers haben immer Vorrang.\n\nAntworte AUSSCHLIESSLICH mit einem JSON-Objekt:\n{\"gericht\":\"kurzer Name\",\"komponenten\":[{\"name\":\"z.B. Schweineschnitzel paniert\",\"menge\":\"ca. 180 g\",\"kcal\":Zahl,\"protein_g\":Zahl}],\"kcal\":Gesamtsumme,\"protein_g\":Gesamtsumme,\"spanne\":\"z.B. 850-1050 kcal\",\"unsicherheit\":\"kurz: was die Schaetzung am meisten beeinflusst\",\"einschaetzung\":\"1 Satz: passt die Mahlzeit zu seinen Regeln (Protein-Anker, Beilagen halbieren)?\",\"tipp\":\"1 kurzer konkreter Verbesserungstipp oder Lob\"}",
       messages: [{ role: "user", content: content }]
     })
   }).then(function(r){
-    if(r.status === 401) throw new Error("API-Schlüssel ungültig – bitte in den Einstellungen prüfen.");
-    if(r.status === 400) throw new Error("Anfrage abgelehnt – evtl. kein Guthaben auf dem API-Konto?");
-    if(!r.ok) throw new Error("Fehler " + r.status + " – bitte später erneut versuchen.");
+    if(!r.ok) return r.json().catch(function(){ return null; }).then(function(d){ throw new Error(apiErr(r, d)); });
     return r.json();
   }).then(function(data){
-    var t = (data.content && data.content[0] && data.content[0].text) || "";
+    var t = textOf(data);
     var m = t.match(/\{[\s\S]*\}/);
-    if(!m) throw new Error("Antwort nicht lesbar – bitte nochmal versuchen.");
+    if(!m) throw new Error(data && data.stop_reason === "max_tokens" ? "Antwort abgebrochen – bitte erneut versuchen oder im Ratgeber ein schnelleres Modell wählen." : "Antwort nicht lesbar – bitte erneut versuchen.");
     var j = JSON.parse(m[0]);
     var aiKcal = Math.round(j.kcal || 0), aiP = Math.round(j.protein_g || 0);
     var fromHist = false;
